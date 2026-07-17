@@ -1,0 +1,123 @@
+//! End-to-end: compile a GPT-2 program, download, load, and run inference.
+//!
+//! Requires PAW_API_KEY (needed for compilation).
+//! Usage:
+//!   PAW_API_KEY=sk-... cargo run --example gpt2_inference
+
+use hf_hub::HFClient;
+use paw_candle::{PawCandleConfig, PawFnLoader, PawRuntimeOptions};
+use paw_core::prelude::*;
+use paw_core::CompileRequest;
+
+const BASE_REPO: &str = "programasweights";
+const BASE_MODEL: &str = "GPT2-GGUF-Q8_0";
+const GGUF_FILE: &str = "gpt2-q8_0.gguf";
+const TOKENIZER_REPO: &str = "openai-community";
+const TOKENIZER_MODEL: &str = "gpt2";
+const TOKENIZER_FILE: &str = "tokenizer.json";
+
+async fn ensure_cached<T: AsRef<std::path::Path>>(
+    hf: &HFClient,
+    repo: &str,
+    model: &str,
+    file: &str,
+    dst: T,
+) -> Result<()> {
+    let dst = dst.as_ref();
+    if dst.exists() {
+        println!("  already cached: {}", dst.display());
+        return Ok(());
+    }
+    println!("  downloading via hf-hub ({repo}/{model}/{file})...");
+    let cached = hf
+        .model(repo, model)
+        .download_file()
+        .filename(file)
+        .send()
+        .await
+        .map_err(|e| Error::Other(format!("hf-hub download {file}: {e}")))?;
+    if let Some(parent) = dst.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::copy(&cached, dst)?;
+    println!("  cached to: {}", dst.display());
+    Ok(())
+}
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    let config = PawConfig::from_env();
+    let api_key = config
+        .effective_api_key()
+        .ok_or_else(|| Error::Other("PAW_API_KEY required for compilation".into()))?;
+    let client = PawClient::new(&config);
+
+    // ── 1. Find the GPT-2 compiler ──────────────────────────────────────
+    println!("[1/5] Finding GPT-2 compiler...");
+    let compilers = client.list_compilers().await?;
+    let gpt2_compiler = compilers
+        .iter()
+        .find(|c| c.name.to_lowercase().contains("gpt2"))
+        .or_else(|| compilers.iter().find(|c| c.name == "gpt2-q8_0"))
+        .map(|c| c.name.clone())
+        .unwrap_or_else(|| {
+            eprintln!("Available compilers:");
+            for c in &compilers {
+                eprintln!("  {}: {}", c.name, c.display_name);
+            }
+            panic!("No GPT-2 compiler found");
+        });
+    println!("  using compiler: {gpt2_compiler}");
+
+    // ── 2. Compile ──────────────────────────────────────────────────────
+    println!("\n[2/5] Compiling new program...");
+    let program = client
+        .compile(
+            CompileRequest::builder()
+                .spec("Classify sentiment: return POSITIVE or NEGATIVE")
+                .compiler(&gpt2_compiler)
+                .ephemeral(true)
+                .build()?,
+        )
+        .await?;
+    println!("  program_id: {}, status: {}", program.id, program.status);
+
+    // ── 3. Download .paw bundle ────────────────────────────────────────
+    println!("\n[3/5] Downloading .paw bundle...");
+    let dir = client.download_paw(&program.id).await?;
+    let bundle = PawBundle::load_from_dir(&dir)?;
+    println!("  interpreter: {}", bundle.interpreter_model());
+    println!("  adapter: {} KB",
+        std::fs::metadata(&bundle.adapter_path).map(|m| m.len() / 1024).unwrap_or(0));
+
+    // ── 4. Ensure base model + tokenizer are cached ────────────────────
+    println!("\n[4/5] Ensuring base model + tokenizer are cached...");
+    let hf = HFClient::new().map_err(|e| Error::Other(format!("hf-hub init: {e}")))?;
+    let gguf_path = config.base_models_dir().join(GGUF_FILE);
+    ensure_cached(&hf, BASE_REPO, BASE_MODEL, GGUF_FILE, &gguf_path).await?;
+
+    let tokenizer_path = dir.join(TOKENIZER_FILE);
+    ensure_cached(&hf, TOKENIZER_REPO, TOKENIZER_MODEL, TOKENIZER_FILE, &tokenizer_path).await?;
+
+    // ── 5. Load and run inference ──────────────────────────────────────
+    println!("\n[5/5] Loading model, running inference...");
+    let candle_config = PawCandleConfig::builder()
+        .core(config)
+        .build();
+    let mut func = PawFnLoader::new(dir)
+        .config(candle_config)
+        .load()?;
+    println!("  model loaded, starting generation...");
+
+    let input = "Urgent: your account has been compromised";
+    let opts = PawRuntimeOptions { max_tokens: Some(30), ..Default::default() };
+    let output = func.run(input, &opts)?;
+    println!("  input:  {input}");
+    println!("  output: {output}");
+
+    if output.trim().is_empty() {
+        eprintln!("  (empty output — generation produced no text beyond input)");
+    }
+
+    Ok(())
+}
