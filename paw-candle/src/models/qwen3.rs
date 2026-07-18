@@ -260,7 +260,6 @@ impl Qwen3Model {
     }
 
     /// Matmul for [batch, seq, in_dim] @ [in_dim, out_dim].
-    /// candle 0.11 doesn't directly support 3D @ 2D, so we flatten.
     fn flatten_bmm(x: &Tensor, w: &Tensor) -> Result<Tensor, candle_core::Error> {
         let (b, s, d) = x.dims3()?;
         let x_2d = x.reshape((b * s, d))?;
@@ -325,7 +324,6 @@ impl QuantizedModel for Qwen3Model {
         for (i, blk) in self.blocks.iter().enumerate() {
             let h_ln = self.rms_norm(&h, &blk.attn_norm)?;
 
-            // candle 0.11 doesn't support 3D @ 2D matmul — use flatten + 2D
             let q = Self::flatten_bmm(&h_ln, &blk.attn_q.t()?)?;
             let k = Self::flatten_bmm(&h_ln, &blk.attn_k.t()?)?;
             let v = Self::flatten_bmm(&h_ln, &blk.attn_v.t()?)?;
@@ -428,7 +426,6 @@ impl QuantizedModel for Qwen3Model {
         // Final norm + lm_head
         h = self.rms_norm(&h, &self.output_norm)?;
         h = Self::flatten_bmm(&h, &self.output_weight.t()?)?;
-
         Ok(h)
     }
 
