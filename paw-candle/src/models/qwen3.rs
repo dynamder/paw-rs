@@ -1,5 +1,5 @@
-use candle_core::quantized::QTensor;
-use candle_core::{DType, Device, Tensor};
+use candle_core::quantized::{QMatMul, QTensor};
+use candle_core::{DType, Device, Module, Tensor};
 use std::path::Path;
 
 use super::{gguf_get, load_gguf_tensors, QuantizedModel};
@@ -72,20 +72,20 @@ impl Qwen3Config {
     }
 }
 
-// ── Block (all weights dequantized to f32) ────────────────────────────
+// ── Block (weights stored as QMatMul for memory efficiency) ───────────
 
 pub struct Qwen3Block {
     attn_norm: Tensor,
-    attn_q: Tensor,   // [q_dim, hidden]
-    attn_k: Tensor,   // [kv_dim, hidden]
-    attn_v: Tensor,   // [kv_dim, hidden]
+    attn_q: QMatMul,
+    attn_k: QMatMul,
+    attn_v: QMatMul,
     attn_q_norm: Tensor,
     attn_k_norm: Tensor,
-    attn_out: Tensor, // [hidden, q_dim]
+    attn_out: QMatMul,
     ffn_norm: Tensor,
-    ffn_gate: Tensor, // [intermediate, hidden]
-    ffn_up: Tensor,   // [intermediate, hidden]
-    ffn_down: Tensor, // [hidden, intermediate]
+    ffn_gate: QMatMul,
+    ffn_up: QMatMul,
+    ffn_down: QMatMul,
     // LoRA
     lora_q: Option<LoraLayer>,
     lora_k: Option<LoraLayer>,
@@ -101,8 +101,8 @@ pub struct Qwen3Block {
 pub struct Qwen3Model {
     config: Qwen3Config,
     device: Device,
-    wte_weight: Tensor,     // dequantized for embedding lookup
-    output_weight: Tensor,  // dequantized lm_head
+    wte_weight: Tensor,       // dequantized for embedding lookup
+    output_weight: QMatMul,    // quantized lm_head
     blocks: Vec<Qwen3Block>,
     output_norm: Tensor,
     kv_cache: Vec<Option<(Tensor, Tensor)>>, // per-layer (k, v) after QK-Norm & RoPE
@@ -113,9 +113,32 @@ pub struct Qwen3Model {
 impl Qwen3Model {
     const EPS: f64 = 1e-6;
 
+    /// Detect SIMD support for fast quantized matmul on the current CPU.
+    fn is_simd_quantized_available() -> bool {
+        #[cfg(target_arch = "x86_64")]
+        { std::is_x86_feature_detected!("avx2") }
+        #[cfg(target_arch = "aarch64")]
+        { std::is_aarch64_feature_detected!("neon") }
+        #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+        { false }
+    }
+
+    /// Wrap a QTensor as QMatMul using quantized matmul when `quantized` is true,
+    /// otherwise dequantize to f32 and wrap in QMatMul::Tensor (fallback).
+    fn make_qmatmul(qt: QTensor, quantized: bool, device: &Device) -> Result<QMatMul, candle_core::Error> {
+        if quantized {
+            Ok(QMatMul::QTensor(std::sync::Arc::new(qt)))
+        } else {
+            let t = qt.dequantize(device)?;
+            Ok(QMatMul::Tensor(t))
+        }
+    }
+
     pub fn from_gguf<P: AsRef<Path>>(path: P, device: &Device) -> Result<Self, candle_core::Error> {
         let (content, mut tensors) = load_gguf_tensors(path, device)?;
         let config = Qwen3Config::from_tensors(&content, &tensors);
+
+        let use_quantized = Self::is_simd_quantized_available();
 
         let mut take = |name: &str| -> QTensor {
             tensors
@@ -125,7 +148,7 @@ impl Qwen3Model {
 
         let wte_q = take("token_embd.weight");
         let wte_weight = wte_q.dequantize(device)?;
-        let output_weight = take("output.weight").dequantize(device)?;
+        let output_weight = Self::make_qmatmul(take("output.weight"), use_quantized, device)?;
         let output_norm = take("output_norm.weight").dequantize(device)?;
 
         let mut blocks = Vec::with_capacity(config.num_hidden_layers);
@@ -133,16 +156,16 @@ impl Qwen3Model {
             let p = format!("blk.{i}.");
             blocks.push(Qwen3Block {
                 attn_norm: take(&format!("{p}attn_norm.weight")).dequantize(device)?,
-                attn_q: take(&format!("{p}attn_q.weight")).dequantize(device)?,
-                attn_k: take(&format!("{p}attn_k.weight")).dequantize(device)?,
-                attn_v: take(&format!("{p}attn_v.weight")).dequantize(device)?,
+                attn_q: Self::make_qmatmul(take(&format!("{p}attn_q.weight")), use_quantized, device)?,
+                attn_k: Self::make_qmatmul(take(&format!("{p}attn_k.weight")), use_quantized, device)?,
+                attn_v: Self::make_qmatmul(take(&format!("{p}attn_v.weight")), use_quantized, device)?,
                 attn_q_norm: take(&format!("{p}attn_q_norm.weight")).dequantize(device)?,
                 attn_k_norm: take(&format!("{p}attn_k_norm.weight")).dequantize(device)?,
-                attn_out: take(&format!("{p}attn_output.weight")).dequantize(device)?,
+                attn_out: Self::make_qmatmul(take(&format!("{p}attn_output.weight")), use_quantized, device)?,
                 ffn_norm: take(&format!("{p}ffn_norm.weight")).dequantize(device)?,
-                ffn_gate: take(&format!("{p}ffn_gate.weight")).dequantize(device)?,
-                ffn_up: take(&format!("{p}ffn_up.weight")).dequantize(device)?,
-                ffn_down: take(&format!("{p}ffn_down.weight")).dequantize(device)?,
+                ffn_gate: Self::make_qmatmul(take(&format!("{p}ffn_gate.weight")), use_quantized, device)?,
+                ffn_up: Self::make_qmatmul(take(&format!("{p}ffn_up.weight")), use_quantized, device)?,
+                ffn_down: Self::make_qmatmul(take(&format!("{p}ffn_down.weight")), use_quantized, device)?,
                 lora_q: None,
                 lora_k: None,
                 lora_v: None,
@@ -213,6 +236,8 @@ impl Qwen3Model {
         count
     }
 
+    /// Fuse LoRA adapters directly into weight tensors.
+    /// This eliminates the per-step LoRA side-path computation.
     fn rms_norm(&self, x: &Tensor, w: &Tensor) -> Result<Tensor, candle_core::Error> {
         candle_nn::ops::rms_norm(x, w, Self::EPS as f32)
     }
@@ -269,33 +294,18 @@ impl Qwen3Model {
         Ok((rope_emb(q)?, rope_emb(k)?))
     }
 
-    /// Matmul for [batch, seq, in_dim] @ [in_dim, out_dim].
-    fn flatten_bmm(x: &Tensor, w: &Tensor) -> Result<Tensor, candle_core::Error> {
-        let (b, s, d) = x.dims3()?;
-        let x_c = x.contiguous()?;
-        let x_2d = x_c.reshape((b * s, d))?;
-        let r = x_2d.matmul(w)?;
-        r.reshape((b, s, r.dim(1)?))
-    }
-
     fn gqa_repeat_static(kv: &Tensor, n_q: usize, n_kv: usize) -> Result<Tensor, candle_core::Error> {
         if n_q == n_kv {
             return Ok(kv.clone());
         }
         let rep = n_q / n_kv;
-        // kv: [1, n_kv, seq, head_dim]
-        // Need each head repeated rep times consecutively:
-        //   [h0, h0, ..., h1, h1, ..., h_{n_kv-1}, ..., h_{n_kv-1}]
-        // NOT block-repeat: [h0, h1, ..., h_{n_kv-1}, h0, ..., h_{n_kv-1}]
+        let b = kv.dim(0)?;
         let n_kv_actual = kv.dim(1)?;
-        let mut parts = Vec::with_capacity(n_kv_actual * rep);
-        for h in 0..n_kv_actual {
-            let head = kv.narrow(1, h, 1)?;
-            for _ in 0..rep {
-                parts.push(head.clone());
-            }
-        }
-        Tensor::cat(&parts, 1)
+        let seq_len = kv.dim(2)?;
+        let head_dim = kv.dim(3)?;
+        let reshaped = kv.reshape((b, n_kv_actual, 1, seq_len, head_dim))?;
+        let repeated = reshaped.repeat(&[1, 1, rep, 1, 1])?;
+        repeated.reshape((b, n_q, seq_len, head_dim))
     }
 }
 
@@ -335,9 +345,9 @@ impl QuantizedModel for Qwen3Model {
         for (i, blk) in self.blocks.iter().enumerate() {
             let h_ln = self.rms_norm(&h, &blk.attn_norm)?;
 
-            let q = Self::flatten_bmm(&h_ln, &blk.attn_q.t()?)?;
-            let k = Self::flatten_bmm(&h_ln, &blk.attn_k.t()?)?;
-            let v = Self::flatten_bmm(&h_ln, &blk.attn_v.t()?)?;
+            let q = blk.attn_q.forward(&h_ln)?;
+            let k = blk.attn_k.forward(&h_ln)?;
+            let v = blk.attn_v.forward(&h_ln)?;
 
             let q = match blk.lora_q { Some(ref l) => (q + l.apply(&h_ln)?)?, None => q };
             let k = match blk.lora_k { Some(ref l) => (k + l.apply(&h_ln)?)?, None => k };
@@ -400,7 +410,7 @@ impl QuantizedModel for Qwen3Model {
                 Some(ref l) => Some(l.apply(&h_attn)?),
                 None => None,
             };
-            let h_attn = Self::flatten_bmm(&h_attn, &blk.attn_out.t()?)?;
+            let h_attn = blk.attn_out.forward(&h_attn)?;
             let h_attn = match attn_delta {
                 Some(ref d) => (h_attn + d)?,
                 None => h_attn,
@@ -411,12 +421,12 @@ impl QuantizedModel for Qwen3Model {
             let h_ln = self.rms_norm(&h, &blk.ffn_norm)?;
 
             // SwiGLU MLP
-            let gate = Self::flatten_bmm(&h_ln, &blk.ffn_gate.t()?)?;
+            let gate = blk.ffn_gate.forward(&h_ln)?;
             let gate = match blk.lora_gate {
                 Some(ref l) => (gate + l.apply(&h_ln)?)?,
                 None => gate,
             };
-            let up = Self::flatten_bmm(&h_ln, &blk.ffn_up.t()?)?;
+            let up = blk.ffn_up.forward(&h_ln)?;
             let up = match blk.lora_up {
                 Some(ref l) => (up + l.apply(&h_ln)?)?,
                 None => up,
@@ -426,7 +436,7 @@ impl QuantizedModel for Qwen3Model {
                 Some(ref l) => Some(l.apply(&activated)?),
                 None => None,
             };
-            let h_mlp = Self::flatten_bmm(&activated, &blk.ffn_down.t()?)?;
+            let h_mlp = blk.ffn_down.forward(&activated)?;
             let h_mlp = match down_delta {
                 Some(ref d) => (h_mlp + d)?,
                 None => h_mlp,
@@ -436,7 +446,7 @@ impl QuantizedModel for Qwen3Model {
 
         // Final norm + lm_head
         h = self.rms_norm(&h, &self.output_norm)?;
-        h = Self::flatten_bmm(&h, &self.output_weight.t()?)?;
+        h = self.output_weight.forward(&h)?;
         Ok(h)
     }
 

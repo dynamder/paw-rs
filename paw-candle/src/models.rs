@@ -150,6 +150,12 @@ pub trait QuantizedModel: Send {
         0
     }
 
+    /// Fuse LoRA adapters directly into weight tensors (default: no-op).
+    /// Called after set_lora(). Eliminates per-step LoRA side-path computation.
+    fn fuse_lora(&mut self) -> std::result::Result<(), candle_core::Error> {
+        Ok(())
+    }
+
     /// Load prefix KV cache into the model (default: no-op).
     fn set_prefix_cache(&mut self, _prefix: &[(Tensor, Tensor)]) {}
 

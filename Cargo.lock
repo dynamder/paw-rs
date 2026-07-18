@@ -2624,11 +2624,14 @@ checksum = "df94ce210e5bc13cb6651479fa48d14f601d9858cfe0467f43ae157023b938d3"
 name = "paw-candle"
 version = "0.1.0"
 dependencies = [
+ "ahash",
  "candle-core",
  "candle-nn",
  "candle-transformers",
  "hf-hub",
+ "memmap2",
  "paw-core",
+ "rayon",
  "safetensors 0.8.0",
  "serde",
  "serde_json",

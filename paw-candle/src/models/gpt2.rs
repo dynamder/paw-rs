@@ -78,9 +78,32 @@ pub struct Gpt2Model {
 }
 
 impl Gpt2Model {
+    /// Detect SIMD support for fast quantized matmul on the current CPU.
+    fn is_simd_quantized_available() -> bool {
+        #[cfg(target_arch = "x86_64")]
+        { std::is_x86_feature_detected!("avx2") }
+        #[cfg(target_arch = "aarch64")]
+        { std::is_aarch64_feature_detected!("neon") }
+        #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+        { false }
+    }
+
+    /// Wrap a QTensor as QMatMul using quantized matmul when `quantized` is true,
+    /// otherwise dequantize to f32 and wrap in QMatMul::Tensor (fallback).
+    fn make_qmatmul(qt: QTensor, quantized: bool, device: &Device) -> Result<QMatMul, candle_core::Error> {
+        if quantized {
+            Ok(QMatMul::QTensor(std::sync::Arc::new(qt)))
+        } else {
+            let t = qt.dequantize(device)?;
+            Ok(QMatMul::Tensor(t))
+        }
+    }
+
     pub fn from_gguf<P: AsRef<Path>>(path: P, device: &Device) -> Result<Self, candle_core::Error> {
         let (content, mut tensors) = load_gguf_tensors(path, device)?;
         let config = Gpt2Config::from_gguf(&content);
+
+        let use_quantized = Self::is_simd_quantized_available();
 
         let mut take = |name: &str| -> QTensor {
             tensors
@@ -90,7 +113,7 @@ impl Gpt2Model {
 
         let wte_q = take("token_embd.weight");
         let wte_weight = wte_q.dequantize(device)?;
-        let wte = QMatMul::from_qtensor(wte_q)?;
+        let wte = Self::make_qmatmul(wte_q, use_quantized, device)?;
         let wpe = take("position_embd.weight").dequantize(device)?;
 
         let mut blocks = Vec::with_capacity(config.num_hidden_layers);
@@ -99,18 +122,18 @@ impl Gpt2Model {
             blocks.push(Gpt2Block {
                 ln_1_weight: take(&format!("{p}attn_norm.weight")).dequantize(device)?,
                 ln_1_bias: take(&format!("{p}attn_norm.bias")).dequantize(device)?,
-                attn_qkv: QMatMul::from_qtensor(take(&format!("{p}attn_qkv.weight")))?,
+                attn_qkv: Self::make_qmatmul(take(&format!("{p}attn_qkv.weight")), use_quantized, device)?,
                 attn_qkv_bias: take(&format!("{p}attn_qkv.bias")).dequantize(device)?,
                 lora_qkv: None,
                 lora_output: None,
-                attn_out: QMatMul::from_qtensor(take(&format!("{p}attn_output.weight")))?,
+                attn_out: Self::make_qmatmul(take(&format!("{p}attn_output.weight")), use_quantized, device)?,
                 attn_out_bias: take(&format!("{p}attn_output.bias")).dequantize(device)?,
                 ln_2_weight: take(&format!("{p}ffn_norm.weight")).dequantize(device)?,
                 ln_2_bias: take(&format!("{p}ffn_norm.bias")).dequantize(device)?,
-                mlp_fc: QMatMul::from_qtensor(take(&format!("{p}ffn_up.weight")))?,
+                mlp_fc: Self::make_qmatmul(take(&format!("{p}ffn_up.weight")), use_quantized, device)?,
                 mlp_fc_bias: take(&format!("{p}ffn_up.bias")).dequantize(device)?,
                 lora_fc: None,
-                mlp_proj: QMatMul::from_qtensor(take(&format!("{p}ffn_down.weight")))?,
+                mlp_proj: Self::make_qmatmul(take(&format!("{p}ffn_down.weight")), use_quantized, device)?,
                 mlp_proj_bias: take(&format!("{p}ffn_down.bias")).dequantize(device)?,
                 lora_proj: None,
             });
