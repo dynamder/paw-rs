@@ -1,0 +1,35 @@
+paw-candle/src/config.rs
+  s_684477f68457f9::t_752c23a864d7ab 9,11,13,16,31,36,38,40,42,44,61,66,76,87,102,108,114,120,126,132
+README.md
+  s_684477f68457f9::t_6d2ffe548a7fbd 1-84
+paw-core/src/client.rs
+  s_684477f68457f9::t_946db186bcc564 236
+  s_684477f68457f9::t_c6fa1c9b15b5dd 310
+  s_684477f68457f9::t_fd5c069bd789c0 215
+  s_684477f68457f9::t_43ac5360cb8d1f 275
+  s_684477f68457f9::t_8da250b6201950 331,345,352,358-369
+  s_684477f68457f9::t_a67db7bb207e44 200
+paw-rs/src/function.rs
+  s_684477f68457f9::t_c2acd44b83d220 211-219
+  s_684477f68457f9::t_c7747fd443dacd 55,60-67,72-80,85-96
+  s_684477f68457f9::t_5451218aa51b4b 104-109
+  s_684477f68457f9::t_dee40813669761 123-124,130
+  s_684477f68457f9::t_eef3e37246f8f0 236,242,248-258
+  s_684477f68457f9::t_d07710098fe042 140,153,159,165-172,185-194
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "d3ee96ca4c145014efa8a83d0287f62cacd1f1e5",
+  "prompts": {},
+  "sessions": {
+    "s_684477f68457f9": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_08c09d9f7ffeqIG28XXQGNyy45",
+        "model": "unknown"
+      },
+      "human_author": "dynamder <igaster@163.com>"
+    }
+  }
+}
