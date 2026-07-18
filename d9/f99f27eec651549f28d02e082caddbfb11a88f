@@ -1,0 +1,19 @@
+Cargo.toml
+  s_684477f68457f9::t_db1f75208b3ea0 9-13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "d9f99f27eec651549f28d02e082caddbfb11a88f",
+  "prompts": {},
+  "sessions": {
+    "s_684477f68457f9": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_08c09d9f7ffeqIG28XXQGNyy45",
+        "model": "unknown"
+      },
+      "human_author": "dynamder <igaster@163.com>"
+    }
+  }
+}
