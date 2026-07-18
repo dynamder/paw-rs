@@ -4,6 +4,8 @@
 
 **⚠️ 注意**：此 SDK 非官方维护。CPU 推理速度较官方 Python SDK（llama.cpp 后端）慢约 4-5x。
 
+> [English version](./README.en.md)
+
 ## 快速开始
 
 ```rust
