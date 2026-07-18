@@ -1,0 +1,17 @@
+[package]
+name = "paw-rs"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "ProgramAsWeights Rust SDK — easy-to-use API for PAW inference"
+
+[dependencies]
+paw-core = { version = "0.1", path = "../paw-core" }
+paw-candle = { version = "0.1", path = "../paw-candle" }
+hf-hub = "1.0"
+thiserror = "2"
+
+[features]
+default = []
+cuda = ["paw-candle/cuda"]
+metal = ["paw-candle/metal"]
