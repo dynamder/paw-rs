@@ -1,0 +1,38 @@
+paw-rs/src/lib.rs
+  s_684477f68457f9::t_c9a7ade8b50e0e 1-52
+paw-rs/src/prelude.rs
+  s_684477f68457f9::t_935f5156adf4d8 1-2
+paw-rs/src/function.rs
+  s_684477f68457f9::t_3a2413c1347428 1
+  s_684477f68457f9::t_8d35c564302a2f 2-5,8,11-15,18,21-22,25,28-150,153-171,174-200,206-214,217-221,223-224,226-230,232-237,239-243,245-249
+  s_684477f68457f9::t_b813111b809d82 173
+  s_684477f68457f9::t_f0d0ed6d462300 238
+  s_684477f68457f9::t_da0c7ec17e4494 201-205
+  s_684477f68457f9::t_5fa57fc0abb1ba 152
+  s_684477f68457f9::t_37659f17e72627 151
+  s_684477f68457f9::t_a7f0e790f7e439 172
+  s_684477f68457f9::t_030034c1c908b8 215-216,222,231,244
+  s_684477f68457f9::t_3172d2e3fb4f7e 225
+  s_684477f68457f9::t_e6d94ac5ab776b 6-7,9-10,16-17,19-20,23-24,26-27
+Cargo.toml
+  s_684477f68457f9::t_31824da4904566 2
+  s_684477f68457f9::t_93b8311d65e0c0 3
+paw-rs/Cargo.toml
+  s_684477f68457f9::t_88dad8365cb522 1-17
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "66791f9de19374943e7cc349d445c11094af0598",
+  "prompts": {},
+  "sessions": {
+    "s_684477f68457f9": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_08c09d9f7ffeqIG28XXQGNyy45",
+        "model": "unknown"
+      },
+      "human_author": "dynamder <igaster@163.com>"
+    }
+  }
+}
