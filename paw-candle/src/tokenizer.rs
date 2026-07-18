@@ -9,35 +9,60 @@ pub struct Tokenizer {
 
 impl Tokenizer {
     /// Load a tokenizer from a PAW bundle directory.
-    ///
-    /// Looks for `tokenizer.json` inside the bundle directory.
+    /// Looks for the GGUF-matched ByteLevel tokenizer in base_models dir first.
     pub fn new(bundle: &PawBundle) -> Result<Self, Error> {
-        let tokenizer_path = bundle.program_dir.join("tokenizer.json");
-        Self::from_file(tokenizer_path)
+        // For Qwen3 models, prefer the GGUF-matched ByteLevel tokenizer
+        let model_name = bundle.interpreter_model().to_lowercase();
+        if model_name.contains("qwen") {
+            let bl_path = bundle
+                .program_dir
+                .parent()
+                .and_then(|p| p.parent())
+                .map(|p| p.join("base_models").join("qwen3-tokenizer-bytelevel.json"));
+            if let Some(ref bl) = bl_path {
+                if bl.exists() {
+                    return Self::from_file(bl);
+                }
+            }
+        }
+        Self::from_file(bundle.program_dir.join("tokenizer.json"))
     }
 
     /// Load a tokenizer from a file path.
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self, Error> {
-        let inner = tokenizers::Tokenizer::from_file(path.as_ref())
+        let mut inner = tokenizers::Tokenizer::from_file(path.as_ref())
             .map_err(|e| Error::Other(format!("Failed to load tokenizer: {e}")))?;
 
-        let eos_id = inner
-            .token_to_id("<|endoftext|>")
+        // Use ByteLevel pre-tokenizer to match GGUF-embedded tokenizer behavior.
+        // The HF tokenizer.json uses a complex regex Sequence, but the GGUF model
+        // uses simple ByteLevel (like GPT-2). We must match the GGUF tokenizer.
+        inner.with_pre_tokenizer(Some(
+            tokenizers::pre_tokenizers::byte_level::ByteLevel::new(true, true, true),
+        ));
+        inner.with_decoder(Some(tokenizers::decoders::byte_level::ByteLevel::new(
+            true, true, false,
+        )));
+
+        // Get EOS token ID from the tokenizer
+        let eos_token_id = inner
+            .token_to_id("<|im_end|>")
+            .or_else(|| inner.token_to_id("<|endoftext|>"))
             .or_else(|| inner.token_to_id("</s>"))
-            .or_else(|| inner.token_to_id("<|im_end|>"))
             .unwrap_or(0);
 
         Ok(Self {
-            eos_token_id: eos_id,
             inner,
+            eos_token_id,
         })
     }
 
+    /// Encode text using the inner tokenizer's native encoding.
+    /// Special tokens in the vocabulary are handled by the BPE model.
     pub fn encode(&self, text: &str) -> Result<Vec<u32>, Error> {
         let encoding = self
             .inner
             .encode(text, false)
-            .map_err(|e| Error::Other(format!("Tokenizer encode error: {e}")))?;
+            .map_err(|e| Error::Other(format!("token encode: {e}")))?;
         Ok(encoding.get_ids().to_vec())
     }
 

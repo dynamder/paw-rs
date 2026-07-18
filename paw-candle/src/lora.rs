@@ -24,10 +24,10 @@ pub struct LoraLayer {
 impl LoraLayer {
     /// Apply the LoRA side-path: returns `B(A(x)) * scale`
     pub fn apply(&self, x: &Tensor) -> Result<Tensor, candle_core::Error> {
-        let a_t = self.a.transpose(0, 1)?.unsqueeze(0)?; // [1, in_dim, rank]
-        let b_t = self.b.transpose(0, 1)?.unsqueeze(0)?; // [1, rank, out_dim]
-        let intermediate = x.matmul(&a_t)?; // [1, seq, rank]
-        let result = intermediate.matmul(&b_t)?; // [1, seq, out_dim]
+        let a_t = self.a.transpose(0, 1)?.unsqueeze(0)?;
+        let b_t = self.b.transpose(0, 1)?.unsqueeze(0)?;
+        let intermediate = x.matmul(&a_t)?;
+        let result = intermediate.matmul(&b_t)?;
         Ok((result * (self.scale as f64))?)
     }
 }

@@ -110,4 +110,12 @@ pub trait QuantizedModel: Send {
     fn set_lora(&mut self, _adapter: &GgufLoraAdapter) -> usize {
         0
     }
+
+    /// Load prefix KV cache into the model (default: no-op).
+    fn set_prefix_cache(&mut self, _prefix: &[(Tensor, Tensor)]) {}
+
+    /// Extract the first `prefix_len` tokens from each layer's KV cache.
+    fn extract_prefix_cache(&self, _prefix_len: usize) -> Option<Vec<(Tensor, Tensor)>> {
+        None
+    }
 }

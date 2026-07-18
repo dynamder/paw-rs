@@ -42,36 +42,41 @@ impl Default for PawRuntimeOptions {
 pub struct PawFunction {
     model: Box<dyn QuantizedModel>,
     tokenizer: Tokenizer,
-    prefix_tokens: Vec<u32>,
+    prefix_text: String,
     suffix_text: String,
     n_prefix: usize,
     n_ctx: usize,
     #[allow(dead_code)]
     lora_adapter: Option<GgufLoraAdapter>,
-    #[allow(dead_code)]
     kv_cache: PrefixKvCache,
+    prefix_loaded: bool,
+    eos_token_id: u32,
 }
 
 impl PawFunction {
     pub(crate) fn new(
         model: Box<dyn QuantizedModel>,
         tokenizer: Tokenizer,
-        prefix_tokens: Vec<u32>,
+        prefix_text: String,
         suffix_text: String,
         n_prefix: usize,
         n_ctx: usize,
-        lora_adapter: Option<GgufLoraAdapter>,
+        #[allow(dead_code)] lora_adapter: Option<GgufLoraAdapter>,
         kv_cache: PrefixKvCache,
+        prefix_loaded: bool,
+        eos_token_id: u32,
     ) -> Self {
         Self {
             model,
             tokenizer,
-            prefix_tokens,
+            prefix_text,
             suffix_text,
             n_prefix,
             n_ctx,
             lora_adapter,
             kv_cache,
+            prefix_loaded,
+            eos_token_id,
         }
     }
 
@@ -79,70 +84,176 @@ impl PawFunction {
     pub fn run(&mut self, input: &str, opts: &PawRuntimeOptions) -> Result<String, Error> {
         debug!("Running inference: input={}", &input[..input.len().min(60)]);
 
+        // Tokenize the ENTIRE prompt (prefix + input + suffix) in ONE pass
+        // so boundary tokens are consistent with llama.cpp's single-pass tokenization
         let full_input = format!("{}{}", input, self.suffix_text);
-        let input_tokens = self.tokenizer.encode(&full_input)?;
 
-        let tokens_used = self.n_prefix + input_tokens.len();
-        if tokens_used >= self.n_ctx {
-            return Err(Error::Other(format!(
-                "Input too long: {tokens_used} tokens (prefix={}, input={}), context={}",
-                self.n_prefix,
-                input_tokens.len(),
-                self.n_ctx
-            )));
-        }
+        if self.prefix_loaded {
+            // Input-only: tokenize input + suffix
+            let input_tokens = self.tokenizer.encode(&full_input)?;
 
-        let gen_limit = opts
-            .max_tokens
-            .map(|m| m.min(self.n_ctx - tokens_used))
-            .unwrap_or(self.n_ctx - tokens_used);
+            // Reset model KV cache to prefix-only state
+            if let Some(ref prefix_kv) = self.kv_cache.get_cached() {
+                self.model.set_prefix_cache(prefix_kv);
+            }
 
-        let mut token_ids = self.prefix_tokens.clone();
-        token_ids.extend(&input_tokens);
-        let start_len = token_ids.len();
-        let device = self.model.device().clone();
+            if input_tokens.len() >= self.n_ctx {
+                return Err(Error::Other(format!(
+                    "Input too long: {}",
+                    input_tokens.len()
+                )));
+            }
 
-        let te = |e: candle_core::Error| Error::Other(format!("tensor op: {e}"));
+            let gen_limit = opts
+                .max_tokens
+                .map(|m| m.min(self.n_ctx - input_tokens.len()))
+                .unwrap_or(self.n_ctx - input_tokens.len());
 
-        for step in 0..gen_limit {
-            let input = Tensor::new(&token_ids[..], &device)
+            let device = self.model.device().clone();
+            let te = |e: candle_core::Error| Error::Other(format!("tensor op: {e}"));
+
+            let prefill_tensor = Tensor::new(&input_tokens[..], &device)
                 .map_err(&te)?
                 .unsqueeze(0)
                 .map_err(&te)?;
-
             let logits = self
                 .model
-                .forward(&input, 0)
-                .map_err(|e| Error::Other(format!("forward: {e}")))?;
-
-            let seq_len = logits.dim(1).map_err(&te)?;
+                .forward(&prefill_tensor, self.n_prefix)
+                .map_err(|e| Error::Other(format!("prefill: {e}")))?;
             let last_logits = logits
                 .squeeze(0)
                 .map_err(&te)?
-                .get(seq_len - 1)
+                .get(logits.dim(1).map_err(&te)? - 1)
                 .map_err(&te)?;
-
-            let next_id = last_logits
+            let mut next_id = last_logits
                 .argmax(0)
                 .map_err(&te)?
                 .to_scalar::<u32>()
                 .map_err(&te)?;
 
-            if next_id == self.model.eos_token_id() {
-                debug!("EOS token at step {step}");
-                break;
+            let mut all_ids = input_tokens.clone();
+            if next_id != self.eos_token_id {
+                all_ids.push(next_id);
             }
 
-            token_ids.push(next_id);
-
-            if step % 10 == 0 {
-                debug!("step {step}: generated token {next_id}");
+            // Decode
+            let start_pos = self.n_prefix + input_tokens.len();
+            let mut current_pos = start_pos;
+            for step in 0..gen_limit {
+                if next_id == self.eos_token_id {
+                    break;
+                }
+                if step > 0 {
+                    let inp = Tensor::new(&[next_id], &device)
+                        .map_err(&te)?
+                        .unsqueeze(0)
+                        .map_err(&te)?;
+                    let logits = self
+                        .model
+                        .forward(&inp, current_pos)
+                        .map_err(|e| Error::Other(format!("decode: {e}")))?;
+                    let last = logits.squeeze(0).map_err(&te)?.get(0).map_err(&te)?;
+                    next_id = last
+                        .argmax(0)
+                        .map_err(&te)?
+                        .to_scalar::<u32>()
+                        .map_err(&te)?;
+                    if next_id == self.eos_token_id {
+                        break;
+                    }
+                    all_ids.push(next_id);
+                }
+                current_pos += 1;
             }
+
+            let output = self.tokenizer.decode(&all_ids[input_tokens.len()..])?;
+            return Ok(output);
         }
 
-        let generated = &token_ids[start_len..];
-        let output = self.tokenizer.decode(generated)?;
-        debug!("Generated {} tokens", generated.len());
+        // FIRST RUN: tokenize prefix + input + suffix together for consistency
+        let full_prompt = format!("{}{}", self.prefix_text, &full_input);
+        let all_tokens = self.tokenizer.encode(&full_prompt)?;
+
+        if all_tokens.len() >= self.n_ctx {
+            return Err(Error::Other(format!(
+                "Input too long: {} tokens",
+                all_tokens.len()
+            )));
+        }
+
+        let gen_limit = opts
+            .max_tokens
+            .map(|m| m.min(self.n_ctx - all_tokens.len()))
+            .unwrap_or(self.n_ctx - all_tokens.len());
+
+        let device = self.model.device().clone();
+        let te = |e: candle_core::Error| Error::Other(format!("tensor op: {e}"));
+
+        // Prefill
+        let prefill_tensor = Tensor::new(&all_tokens[..], &device)
+            .map_err(&te)?
+            .unsqueeze(0)
+            .map_err(&te)?;
+        let logits = self
+            .model
+            .forward(&prefill_tensor, 0)
+            .map_err(|e| Error::Other(format!("prefill: {e}")))?;
+        let last_logits = logits
+            .squeeze(0)
+            .map_err(&te)?
+            .get(logits.dim(1).map_err(&te)? - 1)
+            .map_err(&te)?;
+        let mut next_id = last_logits
+            .argmax(0)
+            .map_err(&te)?
+            .to_scalar::<u32>()
+            .map_err(&te)?;
+
+        let mut gen_ids = Vec::new();
+        if next_id != self.eos_token_id {
+            gen_ids.push(next_id);
+        }
+
+        let mut current_pos = all_tokens.len();
+        for step in 0..gen_limit {
+            if next_id == self.eos_token_id {
+                break;
+            }
+            if step > 0 {
+                let inp = Tensor::new(&[next_id], &device)
+                    .map_err(&te)?
+                    .unsqueeze(0)
+                    .map_err(&te)?;
+                let logits = self
+                    .model
+                    .forward(&inp, current_pos)
+                    .map_err(|e| Error::Other(format!("decode: {e}")))?;
+                let last = logits.squeeze(0).map_err(&te)?.get(0).map_err(&te)?;
+                next_id = last
+                    .argmax(0)
+                    .map_err(&te)?
+                    .to_scalar::<u32>()
+                    .map_err(&te)?;
+                if next_id == self.eos_token_id {
+                    break;
+                }
+                gen_ids.push(next_id);
+            }
+            current_pos += 1;
+        }
+
+        // Save prefix KV cache for future runs
+        let input_token_len = self.tokenizer.encode(&full_input)?.len();
+        let n_prefix_actual = all_tokens.len() - input_token_len;
+        if let Some(prefix_kv) = self.model.extract_prefix_cache(n_prefix_actual) {
+            self.kv_cache.set_cache(prefix_kv.clone());
+            self.kv_cache.save(&prefix_kv).ok();
+            self.model.set_prefix_cache(&prefix_kv);
+        }
+        self.n_prefix = n_prefix_actual;
+        self.prefix_loaded = true;
+
+        let output = self.tokenizer.decode(&gen_ids)?;
         Ok(output)
     }
 }
@@ -234,7 +345,7 @@ impl PawFnLoader {
         let n_prefix = prefix_tokens.len();
         let n_ctx = self.config.core.n_ctx() as usize;
 
-        let kv_cache = PrefixKvCache::new(
+        let mut kv_cache = PrefixKvCache::new(
             bundle.program_dir.join("prefix_kv_cache.bin"),
             model.num_layers(),
             model.head_dim(),
@@ -243,21 +354,34 @@ impl PawFnLoader {
             &model.device(),
         );
 
+        // Try to load prefix KV cache from disk
+        let prefix_loaded = kv_cache.try_load().unwrap_or(false);
+        if prefix_loaded {
+            if let Some(ref cached) = kv_cache.get_cached() {
+                model.set_prefix_cache(cached);
+                info!("Prefix KV cache loaded ({} tokens)", n_prefix);
+            }
+        }
+
         info!(
             "Loaded program: {} prefix tokens, model={}",
             n_prefix,
             bundle.interpreter_model()
         );
 
+        let eos_token_id = tokenizer.eos_token_id();
+
         Ok(PawFunction::new(
             model,
             tokenizer,
-            prefix_tokens,
+            prefix_text,
             suffix_text,
             n_prefix,
             n_ctx,
             lora,
             kv_cache,
+            prefix_loaded,
+            eos_token_id,
         ))
     }
 }
@@ -269,15 +393,12 @@ fn select_device(config: &PawCandleConfig) -> Result<Device, Error> {
         DevicePreference::Auto => {
             #[cfg(feature = "cuda")]
             if let Ok(d) = Device::new_cuda(0) {
-                info!("Using CUDA device");
                 return Ok(d);
             }
             #[cfg(feature = "metal")]
             if let Ok(d) = Device::new_metal(0) {
-                info!("Using Metal device");
                 return Ok(d);
             }
-            info!("Using CPU device");
             Ok(Device::Cpu)
         }
         #[cfg(feature = "cuda")]

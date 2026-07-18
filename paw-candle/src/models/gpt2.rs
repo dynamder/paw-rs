@@ -1,5 +1,5 @@
 use candle_core::quantized::{QMatMul, QTensor};
-use candle_core::{Device, DType, Module, Tensor};
+use candle_core::{DType, Device, Module, Tensor};
 use std::path::Path;
 
 use super::{gguf_get, load_gguf_tensors, QuantizedModel};
@@ -74,6 +74,7 @@ pub struct Gpt2Model {
     ln_f_weight: Tensor,
     ln_f_bias: Tensor,
     wte_weight: Tensor,
+    kv_cache: Vec<Option<(Tensor, Tensor)>>, // per-layer (k, v) [1, n_heads, seq, head_dim]
 }
 
 impl Gpt2Model {
@@ -118,7 +119,18 @@ impl Gpt2Model {
         let ln_f_weight = take("output_norm.weight").dequantize(device)?;
         let ln_f_bias = take("output_norm.bias").dequantize(device)?;
 
-        Ok(Self { config, device: device.clone(), wte, wpe, blocks, ln_f_weight, ln_f_bias, wte_weight })
+        let kv_cache = vec![None; config.num_hidden_layers];
+        Ok(Self {
+            config,
+            device: device.clone(),
+            wte,
+            wpe,
+            blocks,
+            ln_f_weight,
+            ln_f_bias,
+            wte_weight,
+            kv_cache,
+        })
     }
 
     /// Attach LoRA adapter to all matching layers. Returns count of matched layers.
@@ -162,6 +174,18 @@ impl Gpt2Model {
         Ok(mask.unsqueeze(0)?.unsqueeze(0)?)
     }
 
+    fn partial_causal_mask(new_len: usize, total_len: usize, device: &Device) -> Result<Tensor, candle_core::Error> {
+        let cached_len = total_len - new_len;
+        let idx_f = Tensor::arange(0f32, total_len as f32, device)?;
+        let row_f = Tensor::arange(cached_len as f32, total_len as f32, device)?.unsqueeze(1)?;
+        let col_f = idx_f.unsqueeze(0)?;
+        let ge = row_f.broadcast_ge(&col_f)?;
+        let neg_inf = Tensor::full(f32::NEG_INFINITY, (new_len, total_len), device)?;
+        let zeros = Tensor::zeros((new_len, total_len), DType::F32, device)?;
+        let mask = ge.where_cond(&zeros, &neg_inf)?;
+        Ok(mask.unsqueeze(0)?.unsqueeze(0)?)
+    }
+
     fn split_qkv(&self, fused: &Tensor) -> Result<(Tensor, Tensor, Tensor), candle_core::Error> {
         let hidden = self.config.hidden_size;
         let q = fused.narrow(2, 0, hidden)?;
@@ -169,42 +193,37 @@ impl Gpt2Model {
         let v = fused.narrow(2, 2 * hidden, hidden)?;
         Ok((q, k, v))
     }
-
-    fn attention(&self, q: &Tensor, k: &Tensor, v: &Tensor, mask: &Tensor, seq_len: usize) -> Result<Tensor, candle_core::Error> {
-        let n_heads = self.config.num_attention_heads;
-        let head_dim = self.config.head_dim;
-        let scale = 1.0 / (head_dim as f64).sqrt();
-
-        let q = q.reshape((1, seq_len, n_heads, head_dim))?.transpose(1, 2)?;
-        let k = k.reshape((1, seq_len, n_heads, head_dim))?.transpose(1, 2)?;
-        let v = v.reshape((1, seq_len, n_heads, head_dim))?.transpose(1, 2)?;
-
-        let attn_scores = (q.matmul(&k.transpose(2, 3)?)? * scale)?;
-        let attn_scores = attn_scores.broadcast_add(mask)?;
-        let attn_weights = candle_nn::ops::softmax(&attn_scores, candle_core::D::Minus1)?;
-        let context = attn_weights.matmul(&v)?;
-        context.transpose(1, 2)?.reshape((1, seq_len, n_heads * head_dim))
-    }
 }
 
 impl QuantizedModel for Gpt2Model {
-    fn device(&self) -> &Device { &self.device }
-    fn num_layers(&self) -> usize { self.config.num_hidden_layers }
+    fn device(&self) -> &Device {
+        &self.device
+    }
+    fn num_layers(&self) -> usize {
+        self.config.num_hidden_layers
+    }
 
-    fn forward(&mut self, input_ids: &Tensor, _position: usize) -> Result<Tensor, candle_core::Error> {
+    fn forward(
+        &mut self,
+        input_ids: &Tensor,
+        position: usize,
+    ) -> Result<Tensor, candle_core::Error> {
         let (_b_sz, seq_len) = input_ids.dims2()?;
         let device = &self.device;
+        let is_prefill = self.kv_cache[0].is_none();
 
         let flat = input_ids.flatten_all()?;
         let mut h = self.wte_weight.index_select(&flat, 0)?;
         h = h.reshape((_b_sz, seq_len, self.config.hidden_size))?;
-        let pos_ids = Tensor::arange(0u32, seq_len as u32, device)?;
+        let pos_ids = Tensor::arange(position as u32, (position + seq_len) as u32, device)?;
         let pos_emb = self.wpe.index_select(&pos_ids, 0)?.unsqueeze(0)?;
         h = (h + pos_emb)?;
 
-        let mask = Self::causal_mask(seq_len, device)?;
+        let n_heads = self.config.num_attention_heads;
+        let head_dim = self.config.head_dim;
+        let scale = 1.0 / (head_dim as f64).sqrt();
 
-        for blk in &self.blocks {
+        for (i, blk) in self.blocks.iter().enumerate() {
             let h_ln = self.layer_norm(&h, &blk.ln_1_weight, &blk.ln_1_bias)?;
             let qkv = blk.attn_qkv.forward(&h_ln)?;
             let shape = qkv.shape().clone();
@@ -217,11 +236,58 @@ impl QuantizedModel for Gpt2Model {
 
             let (q, k, v) = self.split_qkv(&qkv)?;
 
-            let mut h_attn = self.attention(&q, &k, &v, &mask, seq_len)?;
-            if let Some(ref lora) = blk.lora_output {
-                let delta = lora.apply(&h_attn)?;
-                h_attn = (h_attn + delta)?;
-            }
+            // Multi-head reshape
+            let q = q
+                .reshape((1, seq_len, n_heads, head_dim))?
+                .transpose(1, 2)?
+                .contiguous()?;
+            let k = k
+                .reshape((1, seq_len, n_heads, head_dim))?
+                .transpose(1, 2)?
+                .contiguous()?;
+            let v = v
+                .reshape((1, seq_len, n_heads, head_dim))?
+                .transpose(1, 2)?
+                .contiguous()?;
+
+            // KV cache
+            let (k_total, v_total, total_seq) = match self.kv_cache[i].take() {
+                Some((k_cached, v_cached)) => {
+                    let k_new = Tensor::cat(&[&k_cached, &k], 2)?.contiguous()?;
+                    let v_new = Tensor::cat(&[&v_cached, &v], 2)?.contiguous()?;
+                    let seq = k_new.dim(2)?;
+                    self.kv_cache[i] = Some((k_new.clone(), v_new.clone()));
+                    (k_new, v_new, seq)
+                }
+                None => {
+                    let seq = k.dim(2)?;
+                    self.kv_cache[i] = Some((k.clone(), v.clone()));
+                    (k, v, seq)
+                }
+            };
+
+            // Attention: q @ k^T with optional mask
+            let attn_scores = (q.matmul(&k_total.transpose(2, 3)?)? * scale)?;
+            let attn_scores = if is_prefill && seq_len == total_seq {
+                let mask = Self::causal_mask(seq_len, device)?;
+                attn_scores.broadcast_add(&mask)?
+            } else if !is_prefill && seq_len < total_seq && seq_len > 1 {
+                let mask = Self::partial_causal_mask(seq_len, total_seq, device)?;
+                attn_scores.broadcast_add(&mask)?
+            } else {
+                attn_scores
+            };
+            let attn_weights = candle_nn::ops::softmax(&attn_scores, candle_core::D::Minus1)?;
+            let h_attn = attn_weights.matmul(&v_total)?.transpose(1, 2)?.reshape((
+                1,
+                seq_len,
+                n_heads * head_dim,
+            ))?;
+
+            let h_attn = match blk.lora_output {
+                Some(ref l) => (h_attn.clone() + l.apply(&h_attn)?)?,
+                None => h_attn,
+            };
             let h_attn = blk.attn_out.forward(&h_attn)?;
             let bias = blk.attn_out_bias.unsqueeze(0)?.unsqueeze(0)?;
             let shape = h_attn.shape().clone();
@@ -257,16 +323,64 @@ impl QuantizedModel for Gpt2Model {
         Ok(h)
     }
 
-    fn embed_tokens(&self) -> &Tensor { &self.wte_weight }
-    fn vocab_size(&self) -> usize { self.config.vocab_size }
-    fn hidden_size(&self) -> usize { self.config.hidden_size }
-    fn head_dim(&self) -> usize { self.config.head_dim }
-    fn num_attention_heads(&self) -> usize { self.config.num_attention_heads }
-    fn num_kv_heads(&self) -> usize { self.config.num_attention_heads }
-    fn eos_token_id(&self) -> u32 { 50256 }
-    fn model_name(&self) -> &str { "gpt2" }
+    fn embed_tokens(&self) -> &Tensor {
+        &self.wte_weight
+    }
+    fn vocab_size(&self) -> usize {
+        self.config.vocab_size
+    }
+    fn hidden_size(&self) -> usize {
+        self.config.hidden_size
+    }
+    fn head_dim(&self) -> usize {
+        self.config.head_dim
+    }
+    fn num_attention_heads(&self) -> usize {
+        self.config.num_attention_heads
+    }
+    fn num_kv_heads(&self) -> usize {
+        self.config.num_attention_heads
+    }
+    fn eos_token_id(&self) -> u32 {
+        50256
+    }
+    fn model_name(&self) -> &str {
+        "gpt2"
+    }
     fn set_lora(&mut self, adapter: &GgufLoraAdapter) -> usize {
         self.set_lora(adapter)
+    }
+
+    fn set_prefix_cache(&mut self, prefix: &[(Tensor, Tensor)]) {
+        for (i, pair) in prefix.iter().enumerate().take(self.config.num_hidden_layers) {
+            self.kv_cache[i] = Some(pair.clone());
+        }
+    }
+
+    fn extract_prefix_cache(&self, prefix_len: usize) -> Option<Vec<(Tensor, Tensor)>> {
+        if self.kv_cache[0].is_none() {
+            return None;
+        }
+        let mut result = Vec::with_capacity(self.config.num_hidden_layers);
+        for entry in &self.kv_cache {
+            match entry {
+                Some((k, v)) => {
+                    let k_prefix = k
+                        .narrow(2, 0, prefix_len)
+                        .ok()?
+                        .contiguous()
+                        .ok()?;
+                    let v_prefix = v
+                        .narrow(2, 0, prefix_len)
+                        .ok()?
+                        .contiguous()
+                        .ok()?;
+                    result.push((k_prefix, v_prefix));
+                }
+                None => return None,
+            }
+        }
+        Some(result)
     }
 }
 
@@ -314,15 +428,21 @@ mod tests {
     #[tokio::test]
     #[ignore = "downloads ~120MB model + ~1MB adapter on first run"]
     async fn forward_with_lora_changes_output() {
-        use paw_core::PawClient;
         use paw_core::prelude::PawConfig;
+        use paw_core::PawClient;
 
         let config = PawConfig::from_env();
         let client = PawClient::new(&config);
 
         // Download a .paw bundle (any public program)
-        let program_id = client.resolve_slug("email-triage").await.expect("resolve slug");
-        let dir = client.download_paw(&program_id).await.expect("download paw");
+        let program_id = client
+            .resolve_slug("email-triage")
+            .await
+            .expect("resolve slug");
+        let dir = client
+            .download_paw(&program_id)
+            .await
+            .expect("download paw");
         let adapter_path = dir.join("adapter.gguf");
 
         let device = Device::Cpu;
@@ -366,10 +486,7 @@ mod tests {
                 .unwrap()
                 .to_vec1::<f32>()
                 .unwrap();
-            assert!(
-                last_base != last_lora,
-                "LoRA should change model output"
-            );
+            assert!(last_base != last_lora, "LoRA should change model output");
         } else {
             eprintln!("LoRA adapter has {matched} matching layers (model expects `blk.{{i}}.attn_qkv`), skipping diff check");
         }
