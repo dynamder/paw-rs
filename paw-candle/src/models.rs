@@ -11,7 +11,6 @@ pub mod gpt2;
 
 use candle_core::quantized::gguf_file;
 use candle_core::{Device, Tensor};
-use std::collections::HashMap;
 use std::path::Path;
 
 use crate::lora::GgufLoraAdapter;
@@ -40,24 +39,64 @@ pub(crate) fn gguf_get(content: &gguf_file::Content, key: &str, default: usize) 
 }
 
 /// Load all tensors from a GGUF file.
+///
+/// Uses mmap for zero-copy file access and rayon for parallel tensor
+/// dequantization, plus ahash for faster HashMap lookups.
 pub(crate) fn load_gguf_tensors<P: AsRef<Path>>(
     path: P,
     device: &Device,
 ) -> Result<
     (
         gguf_file::Content,
-        HashMap<String, candle_core::quantized::QTensor>,
+        ahash::HashMap<String, candle_core::quantized::QTensor>,
     ),
     candle_core::Error,
 > {
-    let mut file = std::fs::File::open(path.as_ref())?;
-    let content = gguf_file::Content::read(&mut file)?;
-    let mut tensors = HashMap::new();
-    for (name, _info) in &content.tensor_infos {
-        let qtensor = content.tensor(&mut file, name, device)?;
-        tensors.insert(name.clone(), qtensor);
+    // mmap the GGUF file for zero-copy read access
+    let file = std::fs::File::open(path.as_ref())?;
+    let mmap = unsafe { memmap2::Mmap::map(&file)? };
+    let mut cursor = std::io::Cursor::new(&mmap[..]);
+
+    // Parse GGUF structure from the mmap'd data
+    let content = gguf_file::Content::read(&mut cursor)?;
+
+    // Collect tensor names for parallel loading
+    let names: Vec<&String> = content.tensor_infos.keys().collect();
+    let n = names.len();
+
+    // Load all tensors in parallel using rayon.
+    use std::sync::Mutex;
+    let result: Mutex<std::collections::HashMap<String, candle_core::quantized::QTensor, ahash::RandomState>> =
+        Mutex::new(std::collections::HashMap::with_capacity_and_hasher(n, ahash::RandomState::new()));
+    let load_err = Mutex::new(None::<candle_core::Error>);
+
+    // Each thread creates its own Cursor from the shared mmap and reads
+    // a different tensor.  The `content` is a parsed GGUF header shared
+    // read-only — no mutation.
+    let n_threads = rayon::current_num_threads().max(1);
+    rayon::scope(|s| {
+        for chunk in names.chunks((n + n_threads - 1) / n_threads) {
+            let chunk: Vec<&str> = chunk.iter().map(|s| s.as_str()).collect();
+            s.spawn(|_| {
+                let mut local = std::io::Cursor::new(&mmap[..]);
+                for name in chunk {
+                    let qtensor = match content.tensor(&mut local, name, device) {
+                        Ok(t) => t,
+                        Err(e) => {
+                            *load_err.lock().unwrap() = Some(e);
+                            return;
+                        }
+                    };
+                    result.lock().unwrap().insert(name.to_string(), qtensor);
+                }
+            });
+        }
+    });
+
+    if let Some(e) = load_err.into_inner().unwrap() {
+        return Err(e);
     }
-    Ok((content, tensors))
+    Ok((content, result.into_inner().unwrap()))
 }
 
 /// A quantized model that can perform autoregressive generation.

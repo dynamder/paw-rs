@@ -35,7 +35,7 @@ impl LoraLayer {
 /// A parsed GGUF LoRA adapter.
 pub struct GgufLoraAdapter {
     /// Per-weight-matrix LoRA pairs, keyed by weight name (e.g. `"blk.0.attn_qkv"`).
-    pub layers: HashMap<String, LoraLayer>,
+    pub layers: ahash::HashMap<String, LoraLayer>,
 }
 
 impl GgufLoraAdapter {
@@ -63,7 +63,8 @@ impl GgufLoraAdapter {
             .unwrap_or(16.0);
 
         // Load all tensors
-        let mut tensors: HashMap<String, Tensor> = HashMap::new();
+        let mut tensors: ahash::HashMap<String, Tensor> =
+            HashMap::with_capacity_and_hasher(content.tensor_infos.len(), Default::default());
         for (name, _info) in &content.tensor_infos {
             let qtensor = content
                 .tensor(&mut file, name, device)
@@ -75,7 +76,8 @@ impl GgufLoraAdapter {
         }
 
         // Pair into LoraLayers: strip `.lora_a` / `.lora_b` suffix
-        let mut layers: HashMap<String, LoraLayer> = HashMap::new();
+        let mut layers: ahash::HashMap<String, LoraLayer> =
+            HashMap::with_capacity_and_hasher(content.tensor_infos.len() / 2, Default::default());
         let suffix_a = ".lora_a";
         let suffix_b = ".lora_b";
         let keys: Vec<String> = tensors.keys().cloned().collect();

@@ -24,7 +24,7 @@ pub struct Qwen3Config {
 impl Qwen3Config {
     pub fn from_tensors(
         content: &candle_core::quantized::gguf_file::Content,
-        tensors: &std::collections::HashMap<String, candle_core::quantized::QTensor>,
+        tensors: &ahash::HashMap<String, candle_core::quantized::QTensor>,
     ) -> Self {
         let h = |name: &str, dim: usize| -> usize {
             tensors
@@ -106,6 +106,8 @@ pub struct Qwen3Model {
     blocks: Vec<Qwen3Block>,
     output_norm: Tensor,
     kv_cache: Vec<Option<(Tensor, Tensor)>>, // per-layer (k, v) after QK-Norm & RoPE
+    rope_cos: Tensor, // precomputed cos: [n_ctx, head_dim/2]
+    rope_sin: Tensor, // precomputed sin: [n_ctx, head_dim/2]
 }
 
 impl Qwen3Model {
@@ -160,6 +162,21 @@ impl Qwen3Model {
         );
 
         let kv_cache = vec![None; config.num_hidden_layers];
+
+        // Precompute RoPE cos/sin for all positions up to max_position_embeddings
+        let half = config.head_dim / 2;
+        let n_ctx = config.max_position_embeddings.min(32768);
+        let theta_ln = (config.rope_theta).ln() as f32;
+        let inv_freq: Vec<f32> = (0..half)
+            .map(|i| ((-2.0 * i as f32) * theta_ln / config.head_dim as f32).exp())
+            .collect();
+        let inv_freq_t = Tensor::from_slice(&inv_freq, (1, half), device)?;
+        let positions = Tensor::arange(0f32, n_ctx as f32, device)?
+            .reshape((n_ctx, 1))?;
+        let angles = positions.matmul(&inv_freq_t)?;
+        let rope_cos = angles.cos()?;
+        let rope_sin = angles.sin()?;
+
         Ok(Self {
             config,
             device: device.clone(),
@@ -168,6 +185,8 @@ impl Qwen3Model {
             blocks,
             output_norm,
             kv_cache,
+            rope_cos,
+            rope_sin,
         })
     }
 
@@ -231,27 +250,18 @@ impl Qwen3Model {
         start_pos: usize,
         seq_len: usize,
     ) -> Result<(Tensor, Tensor), candle_core::Error> {
-        let dim = self.config.head_dim;
-        let device = &self.device;
-        let half = dim / 2;
-        let theta_ln = (self.config.rope_theta).ln() as f32;
-        let freqs = Tensor::arange(0f32, half as f32, device)?
-            .to_dtype(DType::F32)?
-            .broadcast_mul(&Tensor::full(-2.0 * theta_ln / dim as f32, half, device)?)?;
-        let freqs = freqs.exp()?;
-        let positions = Tensor::arange(start_pos as f32, (start_pos + seq_len) as f32, device)?.unsqueeze(1)?;
-        let angles = positions.broadcast_mul(&freqs)?;
-        let cos = angles.cos()?;
-        let sin = angles.sin()?;
+        let half = self.config.head_dim / 2;
+        // Use precomputed cos/sin from cache
+        let cos = self.rope_cos.narrow(0, start_pos, seq_len)?;
+        let sin = self.rope_sin.narrow(0, start_pos, seq_len)?;
+        let cos_2d = cos.unsqueeze(0)?.unsqueeze(0)?; // [1, 1, seq, half]
+        let sin_2d = sin.unsqueeze(0)?.unsqueeze(0)?;
         let rope_emb = |t: &Tensor| -> Result<Tensor, candle_core::Error> {
             let t = t.to_dtype(DType::F32)?;
-            // Manual RoPE: q = [1, heads, seq, dim]
-            // Split into halves: even and odd positions
-            let cos_2d = cos.unsqueeze(0)?.unsqueeze(0)?; // [1, 1, seq, half]
-            let sin_2d = sin.unsqueeze(0)?.unsqueeze(0)?; // [1, 1, seq, half]
-            let t_contig = t.contiguous()?;
-            let even = t_contig.narrow(3, 0, half)?.to_dtype(DType::F32)?;
-            let odd = t_contig.narrow(3, half, half)?.to_dtype(DType::F32)?;
+            let t_c = t.contiguous()?;
+            let half_dim = t_c.dim(3)?;
+            let even = t_c.narrow(3, 0, half)?;
+            let odd = t_c.narrow(3, half, half_dim - half)?;
             let rotated_even = (even.broadcast_mul(&cos_2d)? - odd.broadcast_mul(&sin_2d)?)?;
             let rotated_odd = (even.broadcast_mul(&sin_2d)? + odd.broadcast_mul(&cos_2d)?)?;
             Tensor::cat(&[&rotated_even, &rotated_odd], 3)
@@ -262,7 +272,8 @@ impl Qwen3Model {
     /// Matmul for [batch, seq, in_dim] @ [in_dim, out_dim].
     fn flatten_bmm(x: &Tensor, w: &Tensor) -> Result<Tensor, candle_core::Error> {
         let (b, s, d) = x.dims3()?;
-        let x_2d = x.reshape((b * s, d))?;
+        let x_c = x.contiguous()?;
+        let x_2d = x_c.reshape((b * s, d))?;
         let r = x_2d.matmul(w)?;
         r.reshape((b, s, r.dim(1)?))
     }
