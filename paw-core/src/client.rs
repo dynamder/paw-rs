@@ -308,6 +308,21 @@ impl PawClient {
         api_get(&self.http, &url, self.ak()).await
     }
 
+    /// Set or change a program's slug.
+    pub async fn rename_slug(&self, program_id: &str, new_slug: &str) -> Result<serde_json::Value> {
+        let url = api_url(&self.api_url, &format!("/api/v1/programs/{program_id}"));
+        let body = serde_json::json!({"slug": new_slug});
+        let resp = self
+            .http
+            .patch(&url)
+            .headers(build_headers(self.ak()))
+            .json(&body)
+            .send()
+            .await?;
+        let resp = check_response(resp).await?;
+        Ok(resp.json().await?)
+    }
+
     pub async fn get_runtime_manifest(&self, runtime_id: &str) -> Result<RuntimeManifest> {
         if let Some(cached) = self.cache.get_cached_runtime_manifest(runtime_id) {
             return Ok(cached);

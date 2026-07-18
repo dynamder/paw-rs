@@ -50,3 +50,5 @@ pub use paw_core;
 
 pub mod function;
 pub mod prelude;
+
+pub use function::{PawFn, PawFnBuilder};

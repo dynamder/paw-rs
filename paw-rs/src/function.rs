@@ -48,6 +48,11 @@ pub struct PawFn {
 }
 
 impl PawFn {
+    /// Create a `PawFn` from an already-loaded `PawFunction` (low-level path).
+    pub fn from_inner(inner: PawFunction) -> Self {
+        Self { inner }
+    }
+
     pub fn builder() -> PawFnBuilder {
         PawFnBuilder::new()
     }
