@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 description = "Candle-based inference runtime for ProgramAsWeights"
+readme = "../README.en.md"
 repository.workspace = true
 homepage.workspace = true
 documentation.workspace = true
