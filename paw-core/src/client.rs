@@ -197,6 +197,7 @@ pub struct PawClient {
 }
 
 impl PawClient {
+    /// Create a client from a [`PawConfig`].
     pub fn new(config: &PawConfig) -> Self {
         let http = reqwest::Client::builder()
             .timeout(Duration::from_secs(120))
@@ -211,6 +212,7 @@ impl PawClient {
         }
     }
 
+    /// Create a client from environment variables (`PAW_API_URL`, `PAW_API_KEY`, `PAW_CACHE_DIR`, …).
     pub fn from_env() -> Self {
         Self::new(&PawConfig::from_env())
     }
@@ -231,6 +233,7 @@ impl PawClient {
 
     // ── High-Level Public API ─────────────────────────────────────────
 
+    /// Compile a spec on the PAW server. Returns a [`Program`] with `id`, `slug`, `status`.
     pub async fn compile(&self, request: CompileRequest) -> Result<Program> {
         let url = api_url(&self.api_url, "/api/v1/compile");
         debug!("POST {url} with spec ({} chars)", request.spec.len());
@@ -269,6 +272,7 @@ impl PawClient {
         Ok(serde_json::from_value(cleaned)?)
     }
 
+    /// Resolve a slug (e.g. `"email-triage"`) to a program ID.
     pub async fn resolve_slug(&self, slug: &str) -> Result<String> {
         let url = api_url(&self.api_url, &format!("/api/v1/programs/resolve/{slug}"));
         debug!("GET {url}");
@@ -303,6 +307,7 @@ impl PawClient {
         Ok(program_dir)
     }
 
+    /// Fetch program metadata (spec, interpreter, compiler snapshot, etc.).
     pub async fn get_program_meta(&self, program_id: &str) -> Result<BundleMeta> {
         let url = api_url(&self.api_url, &format!("/api/v1/programs/{program_id}"));
         api_get(&self.http, &url, self.ak()).await
@@ -323,6 +328,7 @@ impl PawClient {
         Ok(resp.json().await?)
     }
 
+    /// Fetch a runtime manifest by runtime ID (e.g. `"qwen3-0.6b-q6_k"`).
     pub async fn get_runtime_manifest(&self, runtime_id: &str) -> Result<RuntimeManifest> {
         if let Some(cached) = self.cache.get_cached_runtime_manifest(runtime_id) {
             return Ok(cached);
@@ -336,33 +342,31 @@ impl PawClient {
         Ok(manifest)
     }
 
+    /// List available compilers from the server.
     pub async fn list_compilers(&self) -> Result<Vec<CompilerInfo>> {
         let url = api_url(&self.api_url, "/api/v1/models/compilers");
         let data: CompilerList = api_get(&self.http, &url, self.ak()).await?;
         Ok(data.compilers)
     }
 
+    /// List all versions of a slug.
     pub async fn list_slug_versions(&self, slug: &str) -> Result<VersionList> {
         let url = api_url(&self.api_url, &format!("/api/v1/programs/{slug}/versions"));
         api_get(&self.http, &url, self.ak()).await
     }
 
-    pub async fn list_programs(&self, sort: &str, per_page: u32, page: u32) -> Result<ProgramList> {
-        let url = api_url(&self.api_url, "/api/v1/programs");
-        let resp = self
-            .http
-            .get(&url)
-            .headers(build_headers(self.ak()))
-            .query(&[
-                ("mine", "true"),
-                ("sort", sort),
-                ("per_page", &per_page.to_string()),
-                ("page", &page.to_string()),
-            ])
-            .send()
-            .await?;
-        let resp = check_response(resp).await?;
-        Ok(resp.json().await?)
+    /// List owned programs (requires authentication).
+    pub async fn list_programs(
+        &self,
+        sort: &str,
+        per_page: usize,
+        page: usize,
+    ) -> Result<ProgramList> {
+        let url = api_url(
+            &self.api_url,
+            &format!("/api/v1/programs?mine=true&sort={sort}&per_page={per_page}&page={page}"),
+        );
+        api_get(&self.http, &url, self.ak()).await
     }
 }
 
