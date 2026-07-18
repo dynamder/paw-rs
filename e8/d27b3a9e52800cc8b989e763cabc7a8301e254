@@ -1,0 +1,36 @@
+paw-candle/src/models.rs
+  s_684477f68457f9::t_613291391f222c 153-158
+.cargo/config.toml
+  s_684477f68457f9::t_e5fd7cdb37a5e7 1
+  s_684477f68457f9::t_0c1e99f2bc7cba 2
+paw-candle/src/models/qwen3.rs
+  s_684477f68457f9::t_d3248ef0f5cf88 75,79-81,84,86-88,104-105
+  s_684477f68457f9::t_52f96f51c77905 1-2
+  s_684477f68457f9::t_7926e89bb015ea 239-240
+  s_684477f68457f9::t_b340b3ba820b4d 159-161,164,166-168
+  s_684477f68457f9::t_683a055b4a9ebd 348-350
+  s_684477f68457f9::t_93f67363e26e8e 424,429,439
+  s_684477f68457f9::t_15795b46117005 413
+  s_684477f68457f9::t_0112f084d58e55 116-136,141-142,151
+  s_684477f68457f9::t_24c1a960dbdfb8 302,304-308
+  s_684477f68457f9::t_63f388a97292fb 449
+paw-candle/src/models/gpt2.rs
+  s_684477f68457f9::t_a53e1e3fca5040 81-101,106-107,116
+  s_684477f68457f9::t_8ffcdba4e16580 125,129,133,136
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "e8d27b3a9e52800cc8b989e763cabc7a8301e254",
+  "prompts": {},
+  "sessions": {
+    "s_684477f68457f9": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_08c09d9f7ffeqIG28XXQGNyy45",
+        "model": "unknown"
+      },
+      "human_author": "dynamder <igaster@163.com>"
+    }
+  }
+}
