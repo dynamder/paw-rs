@@ -2,7 +2,7 @@ use candle_core::quantized::{QMatMul, QTensor};
 use candle_core::{DType, Device, Module, Tensor};
 use std::path::Path;
 
-use super::{gguf_get, load_gguf_tensors, QuantizedModel};
+use super::{fuse_lora_weight, gguf_get, load_gguf_tensors, QuantizedModel};
 use crate::lora::{GgufLoraAdapter, LoraLayer};
 
 // ── Config ────────────────────────────────────────────────────────────
@@ -372,6 +372,31 @@ impl QuantizedModel for Gpt2Model {
     }
     fn set_lora(&mut self, adapter: &GgufLoraAdapter) -> usize {
         self.set_lora(adapter)
+    }
+
+    fn fuse_lora(&mut self) -> Result<(), candle_core::Error> {
+        let device = &self.device;
+        for blk in &mut self.blocks {
+            if let Some(ref l) = blk.lora_qkv {
+                fuse_lora_weight(&mut blk.attn_qkv, l, device)?;
+            }
+            if let Some(ref l) = blk.lora_output {
+                fuse_lora_weight(&mut blk.attn_out, l, device)?;
+            }
+            if let Some(ref l) = blk.lora_fc {
+                fuse_lora_weight(&mut blk.mlp_fc, l, device)?;
+            }
+            if let Some(ref l) = blk.lora_proj {
+                fuse_lora_weight(&mut blk.mlp_proj, l, device)?;
+            }
+        }
+        for blk in &mut self.blocks {
+            blk.lora_qkv = None;
+            blk.lora_output = None;
+            blk.lora_fc = None;
+            blk.lora_proj = None;
+        }
+        Ok(())
     }
 
     fn set_prefix_cache(&mut self, prefix: &[(Tensor, Tensor)]) {

@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use candle_core::{Device, Tensor};
+use candle_core::{quantized::gguf_file, Device, Tensor};
 use paw_core::Error;
 
 /// A single LoRA layer pair (A, B) for one weight matrix.
@@ -45,9 +45,13 @@ impl GgufLoraAdapter {
     /// - `blk.{i}.attn_qkv.weight.lora_a` — [rank, hidden]
     /// - `blk.{i}.attn_qkv.weight.lora_b` — [out_dim, rank]
     pub fn from_gguf_file<P: AsRef<Path>>(path: P, device: &Device) -> Result<Self, Error> {
-        let mut file = std::fs::File::open(path.as_ref())
+        // mmap the GGUF file for zero-copy read access
+        let file = std::fs::File::open(path.as_ref())
             .map_err(|e| Error::Other(format!("open adapter: {e}")))?;
-        let content = candle_core::quantized::gguf_file::Content::read(&mut file)
+        let mmap = unsafe { memmap2::Mmap::map(&file) }
+            .map_err(|e| Error::Other(format!("mmap adapter: {e}")))?;
+        let mut cursor = std::io::Cursor::new(&mmap[..]);
+        let content = gguf_file::Content::read(&mut cursor)
             .map_err(|e| Error::Other(format!("read gguf: {e}")))?;
 
         // Extract alpha and rank from metadata
@@ -55,25 +59,57 @@ impl GgufLoraAdapter {
             .metadata
             .get("lora.alpha")
             .and_then(|v| match v {
-                candle_core::quantized::gguf_file::Value::F32(f) => Some(*f),
-                candle_core::quantized::gguf_file::Value::I32(i) => Some(*i as f32),
-                candle_core::quantized::gguf_file::Value::U32(u) => Some(*u as f32),
+                gguf_file::Value::F32(f) => Some(*f),
+                gguf_file::Value::I32(i) => Some(*i as f32),
+                gguf_file::Value::U32(u) => Some(*u as f32),
                 _ => None,
             })
             .unwrap_or(16.0);
 
-        // Load all tensors
-        let mut tensors: ahash::HashMap<String, Tensor> =
-            HashMap::with_capacity_and_hasher(content.tensor_infos.len(), Default::default());
-        for (name, _info) in &content.tensor_infos {
-            let qtensor = content
-                .tensor(&mut file, name, device)
-                .map_err(|e| Error::Other(format!("load tensor {name}: {e}")))?;
-            let t = qtensor
-                .dequantize(device)
-                .map_err(|e| Error::Other(format!("dequantize {name}: {e}")))?;
-            tensors.insert(name.clone(), t);
+        // Load all tensors in parallel using rayon (same pattern as load_gguf_tensors)
+        let names: Vec<&String> = content.tensor_infos.keys().collect();
+        let n = names.len();
+        use std::sync::Mutex;
+        let tensors: Mutex<std::collections::HashMap<String, Tensor, ahash::RandomState>> =
+            Mutex::new(HashMap::with_capacity_and_hasher(
+                n,
+                ahash::RandomState::new(),
+            ));
+        let load_err = Mutex::new(None::<Error>);
+
+        let n_threads = rayon::current_num_threads().max(1);
+        rayon::scope(|s| {
+            for chunk in names.chunks((n + n_threads - 1) / n_threads) {
+                let chunk: Vec<&str> = chunk.iter().map(|s| s.as_str()).collect();
+                s.spawn(|_| {
+                    let mut local = std::io::Cursor::new(&mmap[..]);
+                    for name in chunk {
+                        let qtensor = match content.tensor(&mut local, name, device) {
+                            Ok(t) => t,
+                            Err(e) => {
+                                *load_err.lock().unwrap() =
+                                    Some(Error::Other(format!("load tensor {name}: {e}")));
+                                return;
+                            }
+                        };
+                        let t = match qtensor.dequantize(device) {
+                            Ok(t) => t,
+                            Err(e) => {
+                                *load_err.lock().unwrap() =
+                                    Some(Error::Other(format!("dequantize {name}: {e}")));
+                                return;
+                            }
+                        };
+                        tensors.lock().unwrap().insert(name.to_string(), t);
+                    }
+                });
+            }
+        });
+
+        if let Some(e) = load_err.into_inner().unwrap() {
+            return Err(e);
         }
+        let mut tensors = tensors.into_inner().unwrap();
 
         // Pair into LoraLayers: strip `.lora_a` / `.lora_b` suffix
         let mut layers: ahash::HashMap<String, LoraLayer> =

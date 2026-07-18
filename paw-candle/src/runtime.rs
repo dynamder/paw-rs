@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use candle_core::{Device, Tensor};
+use candle_nn::ops::softmax;
 use paw_core::{Error, PawBundle};
 use tracing::{debug, info};
 
@@ -51,6 +52,45 @@ pub struct PawFunction {
     kv_cache: PrefixKvCache,
     prefix_loaded: bool,
     eos_token_id: u32,
+}
+
+fn sample_logits(logits: &Tensor, opts: &PawRuntimeOptions) -> Result<u32, Error> {
+    if opts.temperature <= 0.0 {
+        let id = logits
+            .argmax(0)
+            .map_err(|e| Error::Other(format!("argmax: {e}")))?
+            .to_scalar::<u32>()
+            .map_err(|e| Error::Other(format!("to_scalar: {e}")))?;
+        return Ok(id);
+    }
+
+    let temperature = opts.temperature.max(1e-8) as f64;
+    let scaled = (logits / temperature).map_err(|e| Error::Other(format!("temperature: {e}")))?;
+
+    let probs = softmax(&scaled, 0).map_err(|e| Error::Other(format!("softmax: {e}")))?;
+
+    let shape = probs.shape().clone();
+    let device = probs.device();
+    let uniform = Tensor::rand(1e-8f64, 1.0 - 1e-8, &shape, device)
+        .map_err(|e| Error::Other(format!("rand: {e}")))?;
+
+    let gumbel = uniform
+        .log()
+        .map_err(|e| Error::Other(format!("log: {e}")))?
+        .neg()
+        .map_err(|e| Error::Other(format!("neg: {e}")))?
+        .log()
+        .map_err(|e| Error::Other(format!("log2: {e}")))?
+        .neg()
+        .map_err(|e| Error::Other(format!("neg2: {e}")))?;
+
+    let perturbed = (scaled + gumbel).map_err(|e| Error::Other(format!("perturb: {e}")))?;
+    let id = perturbed
+        .argmax(0)
+        .map_err(|e| Error::Other(format!("sample: {e}")))?
+        .to_scalar::<u32>()
+        .map_err(|e| Error::Other(format!("sample scalar: {e}")))?;
+    Ok(id)
 }
 
 impl PawFunction {
@@ -125,11 +165,7 @@ impl PawFunction {
                 .map_err(&te)?
                 .get(logits.dim(1).map_err(&te)? - 1)
                 .map_err(&te)?;
-            let mut next_id = last_logits
-                .argmax(0)
-                .map_err(&te)?
-                .to_scalar::<u32>()
-                .map_err(&te)?;
+            let mut next_id = sample_logits(&last_logits, opts)?;
 
             let mut all_ids = input_tokens.clone();
             if next_id != self.eos_token_id {
@@ -153,11 +189,7 @@ impl PawFunction {
                         .forward(&inp, current_pos)
                         .map_err(|e| Error::Other(format!("decode: {e}")))?;
                     let last = logits.squeeze(0).map_err(&te)?.get(0).map_err(&te)?;
-                    next_id = last
-                        .argmax(0)
-                        .map_err(&te)?
-                        .to_scalar::<u32>()
-                        .map_err(&te)?;
+                    next_id = sample_logits(&last, opts)?;
                     if next_id == self.eos_token_id {
                         break;
                     }
@@ -203,11 +235,7 @@ impl PawFunction {
             .map_err(&te)?
             .get(logits.dim(1).map_err(&te)? - 1)
             .map_err(&te)?;
-        let mut next_id = last_logits
-            .argmax(0)
-            .map_err(&te)?
-            .to_scalar::<u32>()
-            .map_err(&te)?;
+        let mut next_id = sample_logits(&last_logits, opts)?;
 
         let mut gen_ids = Vec::new();
         if next_id != self.eos_token_id {
@@ -229,11 +257,7 @@ impl PawFunction {
                     .forward(&inp, current_pos)
                     .map_err(|e| Error::Other(format!("decode: {e}")))?;
                 let last = logits.squeeze(0).map_err(&te)?.get(0).map_err(&te)?;
-                next_id = last
-                    .argmax(0)
-                    .map_err(&te)?
-                    .to_scalar::<u32>()
-                    .map_err(&te)?;
+                next_id = sample_logits(&last, opts)?;
                 if next_id == self.eos_token_id {
                     break;
                 }
@@ -338,7 +362,7 @@ impl PawFnLoader {
         let lora = GgufLoraAdapter::from_gguf_file(&bundle.adapter_path, device).ok();
         if let Some(ref lora) = lora {
             let matched = model.set_lora(lora);
-            tracing::info!("LoRA applied: {matched} weight matrices matched");
+            tracing::info!("LoRA applied: {matched} weight matrices matched (side-path, weights stay quantized)");
         }
         let (prefix_text, suffix_text) = bundle.split_template();
         let prefix_tokens = tokenizer.encode(&prefix_text)?;

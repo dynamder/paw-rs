@@ -1,0 +1,30 @@
+[package]
+name = "paw-llamacpp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "llama.cpp inference runtime for ProgramAsWeights (experimental)"
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+
+[features]
+default = []
+cuda = ["llama-cpp-2/cuda"]
+metal = ["llama-cpp-2/metal"]
+vulkan = ["llama-cpp-2/vulkan"]
+
+[dependencies]
+paw-core = { version = "0.1", path = "../paw-core" }
+llama-cpp-2 = "0.1"
+tokenizers = "0.23"
+encoding_rs = "0.8"
+tracing = "0.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+anyhow = "1"
+
+[dev-dependencies]
+tracing-subscriber = "0.3"
+tokio = { version = "1", features = ["rt", "macros"] }

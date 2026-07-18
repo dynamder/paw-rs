@@ -1,0 +1,30 @@
+[package]
+name = "paw-mistralrs"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Mistral.rs inference runtime for ProgramAsWeights (experimental)"
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+
+[features]
+default = []
+cuda = ["mistralrs/cuda", "mistralrs/flash-attn"]
+metal = ["mistralrs/metal"]
+
+[dependencies]
+paw-core = { version = "0.1", path = "../paw-core" }
+mistralrs = "0.8"
+candle-core = { version = "0.11", default-features = false }
+tokenizers = "0.23"
+safetensors = "0.8"
+tokio = { version = "1", features = ["rt", "macros"] }
+tracing = "0.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+
+[dev-dependencies]
+tracing-subscriber = "0.3"
+anyhow = "1"

@@ -2,7 +2,7 @@ use candle_core::quantized::{QMatMul, QTensor};
 use candle_core::{DType, Device, Module, Tensor};
 use std::path::Path;
 
-use super::{gguf_get, load_gguf_tensors, QuantizedModel};
+use super::{fuse_lora_weight, gguf_get, load_gguf_tensors, QuantizedModel};
 use crate::lora::{GgufLoraAdapter, LoraLayer};
 
 // ── Config (inferred from tensor shapes) ──────────────────────────────
@@ -186,9 +186,10 @@ impl Qwen3Model {
 
         let kv_cache = vec![None; config.num_hidden_layers];
 
-        // Precompute RoPE cos/sin for all positions up to max_position_embeddings
+        // Precompute RoPE cos/sin for up to 2048 positions (matches typical n_ctx)
+        // Avoid precomputing all 32768 positions which is wasteful
         let half = config.head_dim / 2;
-        let n_ctx = config.max_position_embeddings.min(32768);
+        let n_ctx = config.max_position_embeddings.min(2048);
         let theta_ln = (config.rope_theta).ln() as f32;
         let inv_freq: Vec<f32> = (0..half)
             .map(|i| ((-2.0 * i as f32) * theta_ln / config.head_dim as f32).exp())
@@ -476,6 +477,43 @@ impl QuantizedModel for Qwen3Model {
     }
     fn set_lora(&mut self, adapter: &GgufLoraAdapter) -> usize {
         self.apply_lora(adapter)
+    }
+
+    fn fuse_lora(&mut self) -> Result<(), candle_core::Error> {
+        let device = &self.device;
+        for blk in &mut self.blocks {
+            if let Some(ref l) = blk.lora_q {
+                fuse_lora_weight(&mut blk.attn_q, l, device)?;
+            }
+            if let Some(ref l) = blk.lora_k {
+                fuse_lora_weight(&mut blk.attn_k, l, device)?;
+            }
+            if let Some(ref l) = blk.lora_v {
+                fuse_lora_weight(&mut blk.attn_v, l, device)?;
+            }
+            if let Some(ref l) = blk.lora_output {
+                fuse_lora_weight(&mut blk.attn_out, l, device)?;
+            }
+            if let Some(ref l) = blk.lora_gate {
+                fuse_lora_weight(&mut blk.ffn_gate, l, device)?;
+            }
+            if let Some(ref l) = blk.lora_up {
+                fuse_lora_weight(&mut blk.ffn_up, l, device)?;
+            }
+            if let Some(ref l) = blk.lora_down {
+                fuse_lora_weight(&mut blk.ffn_down, l, device)?;
+            }
+        }
+        for blk in &mut self.blocks {
+            blk.lora_q = None;
+            blk.lora_k = None;
+            blk.lora_v = None;
+            blk.lora_output = None;
+            blk.lora_gate = None;
+            blk.lora_up = None;
+            blk.lora_down = None;
+        }
+        Ok(())
     }
 
     fn set_prefix_cache(&mut self, prefix: &[(Tensor, Tensor)]) {

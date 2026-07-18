@@ -9,11 +9,11 @@ pub mod qwen3;
 /// GPT-2 model (simple decoder-only transformer).
 pub mod gpt2;
 
-use candle_core::quantized::gguf_file;
-use candle_core::{Device, Tensor};
+use candle_core::quantized::{gguf_file, QMatMul};
+use candle_core::{DType, Device, Tensor};
 use std::path::Path;
 
-use crate::lora::GgufLoraAdapter;
+use crate::lora::{GgufLoraAdapter, LoraLayer};
 
 /// Read a GGUF integer metadata field, supporting all numeric GGUF value types.
 pub(crate) fn gguf_get(content: &gguf_file::Content, key: &str, default: usize) -> usize {
@@ -97,6 +97,29 @@ pub(crate) fn load_gguf_tensors<P: AsRef<Path>>(
         return Err(e);
     }
     Ok((content, result.into_inner().unwrap()))
+}
+
+/// Extract the underlying weight tensor from a QMatMul as f32.
+pub(crate) fn qmatmul_to_f32(qm: &QMatMul, device: &Device) -> Result<Tensor, candle_core::Error> {
+    match qm {
+        QMatMul::QTensor(qt) => qt.dequantize(device),
+        QMatMul::Tensor(t) => Ok(t.clone()),
+        QMatMul::TensorF16(t) => t.to_dtype(DType::F32),
+    }
+}
+
+/// Fuse a LoRA layer into a QMatMul weight matrix in-place.
+/// Replaces the weight with `W + B @ A * scale`, changing QMatMul to f32 Tensor.
+pub(crate) fn fuse_lora_weight(
+    qm: &mut QMatMul,
+    lora: &LoraLayer,
+    device: &Device,
+) -> Result<(), candle_core::Error> {
+    let w = qmatmul_to_f32(qm, device)?;
+    let delta = (lora.b.matmul(&lora.a)? * (lora.scale as f64))?;
+    let fused = (w + delta)?;
+    *qm = QMatMul::Tensor(fused);
+    Ok(())
 }
 
 /// A quantized model that can perform autoregressive generation.

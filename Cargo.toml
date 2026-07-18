@@ -1,5 +1,5 @@
 [workspace]
-members = ["paw-core", "paw-candle", "paw-rs"]
+members = ["paw-core", "paw-candle", "paw-rs", "paw-mistralrs", "paw-llamacpp"]
 resolver = "3"
 
 [workspace.package]
