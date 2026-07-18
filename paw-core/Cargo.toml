@@ -4,6 +4,9 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 description = "Core types, API client, and cache management for ProgramAsWeights"
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
 
 [dependencies]
 reqwest = { version = "0.12", features = ["json", "stream"] }

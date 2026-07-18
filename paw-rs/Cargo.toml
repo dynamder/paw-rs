@@ -4,6 +4,9 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 description = "ProgramAsWeights Rust SDK — easy-to-use API for PAW inference"
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
 
 [dependencies]
 paw-core = { version = "0.1", path = "../paw-core" }
