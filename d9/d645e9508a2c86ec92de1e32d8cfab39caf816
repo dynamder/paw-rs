@@ -1,0 +1,37 @@
+paw-core/src/client.rs
+  s_684477f68457f9::t_127177cc11894b 311-325
+paw-rs/src/lib.rs
+  s_684477f68457f9::t_d0f19d909eab51 53-54
+paw-rs/src/function.rs
+  s_684477f68457f9::t_a2d176cdb72d30 51-55
+paw-rs/Cargo.toml
+  s_684477f68457f9::t_3a8789d661c037 14-22
+paw-rs/src/bin/paw-rs.rs
+  s_684477f68457f9::t_1d6ae237c59fde 15
+  s_684477f68457f9::t_5f2c1fd2169076 1-14,16-64,66-99,101,103-104,106-118,121-186,188-189,191,193-195,197-198,200-276,285-302,305,327-331
+  s_684477f68457f9::t_81d6d6503e6fee 190,192
+  s_684477f68457f9::t_6d1b12b27b1cbb 65
+  s_684477f68457f9::t_703fe396bef68a 196
+  s_684477f68457f9::t_06820a0172bc38 199
+  s_684477f68457f9::t_a5c6312b17ad66 100,102,105
+  s_684477f68457f9::t_d85c9e4145a948 277-284,303-304,306-326
+  s_684477f68457f9::t_1b1666a5a7fe0d 119
+  s_684477f68457f9::t_d7e1a80ead756f 120
+  s_684477f68457f9::t_6f2b672aa51a5b 187
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "d9d645e9508a2c86ec92de1e32d8cfab39caf816",
+  "prompts": {},
+  "sessions": {
+    "s_684477f68457f9": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_08c09d9f7ffeqIG28XXQGNyy45",
+        "model": "unknown"
+      },
+      "human_author": "dynamder <igaster@163.com>"
+    }
+  }
+}
