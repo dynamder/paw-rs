@@ -1,0 +1,21 @@
+README.en.md
+  s_684477f68457f9::t_1302c70dab03b6 1-96
+README.md
+  s_684477f68457f9::t_0db18c27786505 7-8
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "aefca23cd194f0e7dbeb2071489e1204b9c452ad",
+  "prompts": {},
+  "sessions": {
+    "s_684477f68457f9": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_08c09d9f7ffeqIG28XXQGNyy45",
+        "model": "unknown"
+      },
+      "human_author": "dynamder <igaster@163.com>"
+    }
+  }
+}
