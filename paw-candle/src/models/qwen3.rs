@@ -479,6 +479,18 @@ impl QuantizedModel for Qwen3Model {
         self.apply_lora(adapter)
     }
 
+    fn clear_lora(&mut self) {
+        for blk in &mut self.blocks {
+            blk.lora_q = None;
+            blk.lora_k = None;
+            blk.lora_v = None;
+            blk.lora_output = None;
+            blk.lora_gate = None;
+            blk.lora_up = None;
+            blk.lora_down = None;
+        }
+    }
+
     fn fuse_lora(&mut self) -> Result<(), candle_core::Error> {
         let device = &self.device;
         for blk in &mut self.blocks {

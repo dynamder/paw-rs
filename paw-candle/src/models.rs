@@ -173,6 +173,9 @@ pub trait QuantizedModel: Send {
         0
     }
 
+    /// Remove all LoRA adapters from the model, restoring it to base state.
+    fn clear_lora(&mut self) {}
+
     /// Fuse LoRA adapters directly into weight tensors (default: no-op).
     /// Called after set_lora(). Eliminates per-step LoRA side-path computation.
     fn fuse_lora(&mut self) -> std::result::Result<(), candle_core::Error> {

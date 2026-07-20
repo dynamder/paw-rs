@@ -37,6 +37,7 @@
 //! | [`gpt2_benchmark.rs`](https://github.com/dynamder/paw-rs/tree/main/paw-candle/examples/gpt2_benchmark.rs) | GPT-2 latency benchmark |
 
 mod kv_cache;
+pub mod interpreter;
 pub mod lora;
 pub mod models;
 mod tokenizer;
@@ -46,8 +47,9 @@ pub mod runtime;
 
 pub use config::PawCandleConfigBuilder;
 pub use config::{DevicePreference, PawCandleConfig};
+pub use interpreter::{get_or_load_model, Dynamic, Gpt2, InterpreterModel, Qwen3_0_6B};
 pub use paw_core;
-pub use runtime::{ensure_assets, PawFnLoader, PawFunction, PawRuntimeOptions};
+pub use runtime::{ensure_assets, PawFnLoader, PawFunction, PawFnTrait, PawRuntimeOptions};
 
 pub use lora::{GgufLoraAdapter, LoraLayer};
 
@@ -55,7 +57,8 @@ pub type Error = paw_core::Error;
 
 pub mod prelude {
     pub use super::config::{DevicePreference, PawCandleConfig, PawCandleConfigBuilder};
+    pub use super::interpreter::{Gpt2, InterpreterModel, Qwen3_0_6B};
     pub use super::lora::{GgufLoraAdapter, LoraLayer};
-    pub use super::runtime::{PawFnLoader, PawFunction, PawRuntimeOptions};
+    pub use super::runtime::{PawFnLoader, PawFunction, PawFnTrait, PawRuntimeOptions};
     pub use paw_core::prelude::*;
 }

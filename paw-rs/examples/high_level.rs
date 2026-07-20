@@ -14,7 +14,7 @@ async fn main() -> paw_core::Result<()> {
     let config = PawConfig::from_env();
 
     // Build a new program via the PAW API
-    let mut f = PawFn::builder()
+    let mut f = PawFnBuilder::builder()
         .config(config)
         .spec("Classify sentiment: return POSITIVE or NEGATIVE")
         .ephemeral(true)

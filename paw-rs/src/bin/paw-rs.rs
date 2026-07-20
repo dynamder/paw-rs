@@ -236,7 +236,7 @@ async fn cmd_run(program_ref: &str, input: &str, max_tokens: Option<usize>, temp
     let inner = paw_candle::PawFnLoader::new(dir)
         .config(candle_config)
         .load()?;
-    let mut func = paw_rs::PawFn::from_inner(inner);
+    let mut func = paw_rs::PawFn::<paw_candle::Dynamic>::from_inner(inner);
 
     let opts = paw_candle::PawRuntimeOptions {
         max_tokens,

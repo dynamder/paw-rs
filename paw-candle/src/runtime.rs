@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 
 use candle_core::{Device, Tensor};
 use candle_nn::ops::softmax;
@@ -34,6 +35,14 @@ impl Default for PawRuntimeOptions {
     }
 }
 
+// ── PawFnTrait (dynamic dispatch) ──────────────────────────────────────
+
+pub trait PawFnTrait: Send {
+    fn run(&mut self, input: &str) -> Result<String, Error>;
+    fn run_with(&mut self, input: &str, opts: &PawRuntimeOptions) -> Result<String, Error>;
+    fn interpreter(&self) -> &str;
+}
+
 // ── PawFunction (inference runtime) ────────────────────────────────────
 
 /// The inference runtime for a PAW program.
@@ -41,7 +50,7 @@ impl Default for PawRuntimeOptions {
 /// Created by [`PawFnLoader`] — this struct only owns loaded state and
 /// exposes [`run()`](PawFunction::run).
 pub struct PawFunction {
-    model: Box<dyn QuantizedModel>,
+    model: Arc<Mutex<Box<dyn QuantizedModel>>>,
     tokenizer: Tokenizer,
     prefix_text: String,
     suffix_text: String,
@@ -52,6 +61,7 @@ pub struct PawFunction {
     kv_cache: PrefixKvCache,
     prefix_loaded: bool,
     eos_token_id: u32,
+    interpreter_model: String,
 }
 
 fn sample_logits(logits: &Tensor, opts: &PawRuntimeOptions) -> Result<u32, Error> {
@@ -95,7 +105,7 @@ fn sample_logits(logits: &Tensor, opts: &PawRuntimeOptions) -> Result<u32, Error
 
 impl PawFunction {
     pub(crate) fn new(
-        model: Box<dyn QuantizedModel>,
+        model: Arc<Mutex<Box<dyn QuantizedModel>>>,
         tokenizer: Tokenizer,
         prefix_text: String,
         suffix_text: String,
@@ -105,6 +115,7 @@ impl PawFunction {
         kv_cache: PrefixKvCache,
         prefix_loaded: bool,
         eos_token_id: u32,
+        interpreter_model: String,
     ) -> Self {
         Self {
             model,
@@ -117,24 +128,32 @@ impl PawFunction {
             kv_cache,
             prefix_loaded,
             eos_token_id,
+            interpreter_model,
         }
+    }
+
+    pub fn interpreter(&self) -> &str {
+        &self.interpreter_model
     }
 
     /// Run inference on the given input text.
     pub fn run(&mut self, input: &str, opts: &PawRuntimeOptions) -> Result<String, Error> {
         debug!("Running inference: input={}", &input[..input.len().min(60)]);
 
-        // Tokenize the ENTIRE prompt (prefix + input + suffix) in ONE pass
-        // so boundary tokens are consistent with llama.cpp's single-pass tokenization
         let full_input = format!("{}{}", input, self.suffix_text);
 
+        let mut model = self.model.lock().unwrap();
+
+        // Swap LoRA to this program's adapter
+        if let Some(ref lora) = self.lora_adapter {
+            model.set_lora(lora);
+        }
+
         if self.prefix_loaded {
-            // Input-only: tokenize input + suffix
             let input_tokens = self.tokenizer.encode(&full_input)?;
 
-            // Reset model KV cache to prefix-only state
             if let Some(ref prefix_kv) = self.kv_cache.get_cached() {
-                self.model.set_prefix_cache(prefix_kv);
+                model.set_prefix_cache(prefix_kv);
             }
 
             if input_tokens.len() >= self.n_ctx {
@@ -149,15 +168,14 @@ impl PawFunction {
                 .map(|m| m.min(self.n_ctx - input_tokens.len()))
                 .unwrap_or(self.n_ctx - input_tokens.len());
 
-            let device = self.model.device().clone();
+            let device = model.device().clone();
             let te = |e: candle_core::Error| Error::Other(format!("tensor op: {e}"));
 
             let prefill_tensor = Tensor::new(&input_tokens[..], &device)
                 .map_err(&te)?
                 .unsqueeze(0)
                 .map_err(&te)?;
-            let logits = self
-                .model
+            let logits = model
                 .forward(&prefill_tensor, self.n_prefix)
                 .map_err(|e| Error::Other(format!("prefill: {e}")))?;
             let last_logits = logits
@@ -172,7 +190,6 @@ impl PawFunction {
                 all_ids.push(next_id);
             }
 
-            // Decode
             let start_pos = self.n_prefix + input_tokens.len();
             let mut current_pos = start_pos;
             for step in 0..gen_limit {
@@ -184,8 +201,7 @@ impl PawFunction {
                         .map_err(&te)?
                         .unsqueeze(0)
                         .map_err(&te)?;
-                    let logits = self
-                        .model
+                    let logits = model
                         .forward(&inp, current_pos)
                         .map_err(|e| Error::Other(format!("decode: {e}")))?;
                     let last = logits.squeeze(0).map_err(&te)?.get(0).map_err(&te)?;
@@ -202,7 +218,7 @@ impl PawFunction {
             return Ok(output);
         }
 
-        // FIRST RUN: tokenize prefix + input + suffix together for consistency
+        // FIRST RUN: tokenize prefix + input + suffix together
         let full_prompt = format!("{}{}", self.prefix_text, &full_input);
         let all_tokens = self.tokenizer.encode(&full_prompt)?;
 
@@ -218,7 +234,7 @@ impl PawFunction {
             .map(|m| m.min(self.n_ctx - all_tokens.len()))
             .unwrap_or(self.n_ctx - all_tokens.len());
 
-        let device = self.model.device().clone();
+        let device = model.device().clone();
         let te = |e: candle_core::Error| Error::Other(format!("tensor op: {e}"));
 
         // Prefill
@@ -226,8 +242,7 @@ impl PawFunction {
             .map_err(&te)?
             .unsqueeze(0)
             .map_err(&te)?;
-        let logits = self
-            .model
+        let logits = model
             .forward(&prefill_tensor, 0)
             .map_err(|e| Error::Other(format!("prefill: {e}")))?;
         let last_logits = logits
@@ -252,8 +267,7 @@ impl PawFunction {
                     .map_err(&te)?
                     .unsqueeze(0)
                     .map_err(&te)?;
-                let logits = self
-                    .model
+                let logits = model
                     .forward(&inp, current_pos)
                     .map_err(|e| Error::Other(format!("decode: {e}")))?;
                 let last = logits.squeeze(0).map_err(&te)?.get(0).map_err(&te)?;
@@ -269,16 +283,28 @@ impl PawFunction {
         // Save prefix KV cache for future runs
         let input_token_len = self.tokenizer.encode(&full_input)?.len();
         let n_prefix_actual = all_tokens.len() - input_token_len;
-        if let Some(prefix_kv) = self.model.extract_prefix_cache(n_prefix_actual) {
+        if let Some(prefix_kv) = model.extract_prefix_cache(n_prefix_actual) {
             self.kv_cache.set_cache(prefix_kv.clone());
             self.kv_cache.save(&prefix_kv).ok();
-            self.model.set_prefix_cache(&prefix_kv);
+            model.set_prefix_cache(&prefix_kv);
         }
         self.n_prefix = n_prefix_actual;
         self.prefix_loaded = true;
 
         let output = self.tokenizer.decode(&gen_ids)?;
         Ok(output)
+    }
+}
+
+impl PawFnTrait for PawFunction {
+    fn run(&mut self, input: &str) -> Result<String, Error> {
+        self.run(input, &PawRuntimeOptions::default())
+    }
+    fn run_with(&mut self, input: &str, opts: &PawRuntimeOptions) -> Result<String, Error> {
+        self.run(input, opts)
+    }
+    fn interpreter(&self) -> &str {
+        self.interpreter()
     }
 }
 
@@ -328,7 +354,17 @@ impl PawFnLoader {
     pub fn load(self) -> Result<PawFunction, Error> {
         let bundle = self.load_bundle()?;
         let device = select_device(&self.config)?;
-        let model = load_model(&bundle, &self.config, &device)?;
+        let model = Arc::new(Mutex::new(load_model(&bundle, &self.config, &device)?));
+        let tokenizer = Tokenizer::new(&bundle)?;
+        self.assemble(bundle, model, tokenizer)
+    }
+
+    /// Load with a pre-existing (possibly shared) model.
+    pub fn load_with_model(
+        self,
+        model: Arc<Mutex<Box<dyn QuantizedModel>>>,
+    ) -> Result<PawFunction, Error> {
+        let bundle = self.load_bundle()?;
         let tokenizer = Tokenizer::new(&bundle)?;
         self.assemble(bundle, model, tokenizer)
     }
@@ -355,22 +391,26 @@ impl PawFnLoader {
     pub fn assemble(
         &self,
         bundle: PawBundle,
-        mut model: Box<dyn QuantizedModel>,
+        model: Arc<Mutex<Box<dyn QuantizedModel>>>,
         tokenizer: Tokenizer,
     ) -> Result<PawFunction, Error> {
-        let device = model.device();
-        let lora = GgufLoraAdapter::from_gguf_file(&bundle.adapter_path, device).ok();
+        let device;
+        {
+            let m = model.lock().unwrap();
+            device = m.device().clone();
+        }
+        let (num_layers, head_dim, num_kv_heads) = {
+            let m = model.lock().unwrap();
+            (m.num_layers(), m.head_dim(), m.num_kv_heads())
+        };
+        let lora = GgufLoraAdapter::from_gguf_file(&bundle.adapter_path, &device).ok();
         if let Some(ref lora) = lora {
-            let matched = model.set_lora(lora);
+            let mut m = model.lock().unwrap();
+            let matched = m.set_lora(lora);
             tracing::info!("LoRA applied: {matched} weight matrices matched (side-path, weights stay quantized)");
         }
         let (prefix_text, suffix_text) = bundle.split_template();
 
-        // Encode prefix + "x" + suffix to get the actual prefix token count.
-        // This is critical: ByteLevel tokenizer (add_prefix_space=true) adds
-        // a leading space when encoding standalone text but NOT when it's
-        // embedded in a larger string.  encoding prefix + x + suffix and then
-        // subtracting the encoding of "x" gives the correct in-context length.
         let placeholder = "x";
         let full_test = format!("{prefix_text}{placeholder}{suffix_text}");
         let full_test_tokens = tokenizer.encode(&full_test)?;
@@ -382,26 +422,26 @@ impl PawFnLoader {
 
         let mut kv_cache = PrefixKvCache::new(
             bundle.program_dir.join("prefix_kv_cache.bin"),
-            model.num_layers(),
-            model.head_dim(),
-            model.num_kv_heads(),
+            num_layers,
+            head_dim,
+            num_kv_heads,
             n_prefix,
-            &model.device(),
+            &device,
         );
 
-        // Try to load prefix KV cache from disk
         let prefix_loaded = kv_cache.try_load().unwrap_or(false);
         if prefix_loaded {
             if let Some(ref cached) = kv_cache.get_cached() {
-                model.set_prefix_cache(cached);
-                info!("Prefix KV cache loaded ({} tokens)", n_prefix);
+                let mut m = model.lock().unwrap();
+                m.set_prefix_cache(cached);
             }
+            info!("Prefix KV cache loaded ({} tokens)", n_prefix);
         }
 
+        let interpreter = bundle.interpreter_model().to_string();
         info!(
-            "Loaded program: {} prefix tokens, model={}",
+            "Loaded program: {} prefix tokens, model={interpreter}",
             n_prefix,
-            bundle.interpreter_model()
         );
 
         let eos_token_id = tokenizer.eos_token_id();
@@ -417,6 +457,7 @@ impl PawFnLoader {
             kv_cache,
             prefix_loaded,
             eos_token_id,
+            interpreter,
         ))
     }
 }
@@ -521,6 +562,11 @@ fn select_device(config: &PawCandleConfig) -> Result<Device, Error> {
         DevicePreference::Metal => Device::new_metal(0).map_err(|e| Error::Other(e.to_string())),
         DevicePreference::Cpu => Ok(Device::Cpu),
     }
+}
+
+/// Select the device for loading models, exposed for use by paw-rs.
+pub fn select_device_for_loading(config: &PawCandleConfig) -> Result<Device, Error> {
+    select_device(config)
 }
 
 fn load_model(

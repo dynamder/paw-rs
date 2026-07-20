@@ -374,6 +374,15 @@ impl QuantizedModel for Gpt2Model {
         self.set_lora(adapter)
     }
 
+    fn clear_lora(&mut self) {
+        for blk in &mut self.blocks {
+            blk.lora_qkv = None;
+            blk.lora_output = None;
+            blk.lora_fc = None;
+            blk.lora_proj = None;
+        }
+    }
+
     fn fuse_lora(&mut self) -> Result<(), candle_core::Error> {
         let device = &self.device;
         for blk in &mut self.blocks {
