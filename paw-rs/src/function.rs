@@ -1,71 +1,68 @@
 use std::marker::PhantomData;
 
-use paw_candle::{
-    get_or_load_model, DevicePreference, InterpreterModel, PawCandleConfig, PawFnLoader,
-    PawFnTrait, PawFunction, PawRuntimeOptions,
-};
-use paw_core::{CompileRequest, PawClient, PawConfig, Error};
+use paw_core::{CompileRequest, PawClient, PawConfig, Error, PawFnTrait, PawRuntimeOptions};
+
+#[cfg(all(feature = "llamacpp", not(feature = "candle")))]
+fn backend_load(dir: std::path::PathBuf, config: PawConfig) -> Result<Box<dyn PawFnTrait>, Error> {
+    use paw_llamacpp::{PawLlamaCppConfig, PawFnLoader};
+    let inner = PawFnLoader::new(dir)
+        .config(PawLlamaCppConfig::builder().core(config).build())
+        .load()?;
+    Ok(Box::new(inner) as Box<dyn PawFnTrait>)
+}
+
+#[cfg(feature = "candle")]
+fn backend_load(dir: std::path::PathBuf, config: PawConfig) -> Result<Box<dyn PawFnTrait>, Error> {
+    use paw_candle::{DevicePreference, PawCandleConfig};
+    let inner = paw_candle::PawFnLoader::new(dir)
+        .config(PawCandleConfig::builder().core(config).device(DevicePreference::Auto).build())
+        .load()?;
+    Ok(Box::new(inner) as Box<dyn PawFnTrait>)
+}
+
+macro_rules! cfg_backend_load {
+    ($self:ident, $dir:ident) => {
+        backend_load($dir, $self.config)
+    };
+}
 
 // ── State markers ─────────────────────────────────────────────────────
 
-/// Initial builder state: no slug or spec set yet.
 pub struct Unset;
-
-/// Builder has a slug, can call `.load()`.
 pub struct ForLoad;
-
-/// Builder has a spec, can call `.compile()`.
 pub struct ForCompile;
 
 // ── PawFn ─────────────────────────────────────────────────────────────
 
-/// Typed PAW function, parameterized by the interpreter model.
+/// Typed PAW function (requires `candle` feature).
 ///
-/// The builder ([`PawFnBuilder::builder()`]) returns `Box<dyn PawFnTrait>`.
-/// For static typing and model sharing, use a concrete type:
-///
-/// ```rust,no_run
-/// use paw_rs::prelude::*;
-/// use paw_rs::paw_candle::Qwen3_0_6B;
-/// # async fn example() -> std::result::Result<(), paw_core::Error> {
-/// let mut f = PawFn::<Qwen3_0_6B>::load_slug("email-triage").await?;
-/// # Ok(()) }
-/// ```
-pub struct PawFn<T: InterpreterModel = paw_candle::Dynamic> {
-    inner: PawFunction,
+/// Only available when the `candle` backend is enabled.
+#[cfg(feature = "candle")]
+pub struct PawFn<T: paw_candle::InterpreterModel> {
+    inner: paw_candle::PawFunction,
     _phantom: PhantomData<T>,
 }
 
-impl<T: InterpreterModel> PawFn<T> {
-    /// Wrap a pre-loaded `PawFunction` (low-level path).
-    pub fn from_inner(inner: PawFunction) -> Self {
-        Self {
-            inner,
-            _phantom: PhantomData,
-        }
+#[cfg(feature = "candle")]
+impl<T: paw_candle::InterpreterModel> PawFn<T> {
+    pub fn from_inner(inner: paw_candle::PawFunction) -> Self {
+        Self { inner, _phantom: PhantomData }
     }
 
-    /// Run inference with default options (greedy decoding, no token limit).
     pub fn run(&mut self, input: &str) -> Result<String, Error> {
         self.inner.run(input, &PawRuntimeOptions::default())
     }
 
-    /// Run inference with custom [`PawRuntimeOptions`].
     pub fn run_with(&mut self, input: &str, opts: &PawRuntimeOptions) -> Result<String, Error> {
         self.inner.run(input, opts)
     }
 
-    /// The interpreter model identifier (e.g. `"Qwen/Qwen3-0.6B"`).
     pub fn interpreter(&self) -> &str {
         self.inner.interpreter()
     }
 
-    // ── Static-typed constructors (with shared model) ──────────────
-
-    /// Load an existing program by slug, reusing a cached base model
-    /// identified by `T`.  Multiple [`PawFn<T>`] instances of the same
-    /// `T` share a single base model in memory.
     pub async fn load_slug(slug: &str) -> Result<Self, Error> {
+        use paw_candle::{get_or_load_model, DevicePreference, PawCandleConfig};
         let config = PawConfig::from_env();
         let client = PawClient::new(&config);
         let program_id = client.resolve_slug(slug).await?;
@@ -77,26 +74,18 @@ impl<T: InterpreterModel> PawFn<T> {
             .build();
         let device = paw_candle::runtime::select_device_for_loading(&candle_config)?;
         let shared = get_or_load_model::<T>(&config, &device)?;
-        let inner = PawFnLoader::new(dir)
+        let inner = paw_candle::PawFnLoader::new(dir)
             .config(candle_config)
             .load_with_model(shared)?;
-        Ok(Self {
-            inner,
-            _phantom: PhantomData,
-        })
+        Ok(Self { inner, _phantom: PhantomData })
     }
 
-    /// Compile a spec and load it as a typed [`PawFn<T>`].
-    ///
-    /// The model `T` determines the compiler and enables base model sharing.
     pub async fn compile_spec(spec: &str, compiler: &str) -> Result<Self, Error> {
+        use paw_candle::{get_or_load_model, DevicePreference, PawCandleConfig};
         let config = PawConfig::from_env();
         let client = PawClient::new(&config);
         let request = CompileRequest::builder()
-            .spec(spec)
-            .compiler(compiler)
-            .ephemeral(true)
-            .build()?;
+            .spec(spec).compiler(compiler).ephemeral(true).build()?;
         let program = client.compile(request).await?;
         let dir = client.download_paw(&program.id).await?;
         download_assets(&config, &dir).await?;
@@ -106,123 +95,91 @@ impl<T: InterpreterModel> PawFn<T> {
             .build();
         let device = paw_candle::runtime::select_device_for_loading(&candle_config)?;
         let shared = get_or_load_model::<T>(&config, &device)?;
-        let inner = PawFnLoader::new(dir)
+        let inner = paw_candle::PawFnLoader::new(dir)
             .config(candle_config)
             .load_with_model(shared)?;
-        Ok(Self {
-            inner,
-            _phantom: PhantomData,
-        })
+        Ok(Self { inner, _phantom: PhantomData })
     }
 }
 
-impl<T: InterpreterModel> PawFnTrait for PawFn<T> {
-    fn run(&mut self, input: &str) -> Result<String, Error> {
-        self.run(input)
-    }
-    fn run_with(&mut self, input: &str, opts: &PawRuntimeOptions) -> Result<String, Error> {
-        self.run_with(input, opts)
-    }
-    fn interpreter(&self) -> &str {
-        self.interpreter()
-    }
+#[cfg(feature = "candle")]
+impl<T: paw_candle::InterpreterModel> PawFnTrait for PawFn<T> {
+    fn run(&mut self, input: &str) -> Result<String, Error> { self.run(input) }
+    fn run_with(&mut self, input: &str, opts: &PawRuntimeOptions) -> Result<String, Error> { self.run_with(input, opts) }
+    fn interpreter(&self) -> &str { self.interpreter() }
 }
 
 // ── PawFnBuilder ──────────────────────────────────────────────────────
 
-/// Type-state builder that returns `Box<dyn PawFnTrait>`.
 pub struct PawFnBuilder<State = Unset> {
     config: PawConfig,
-    device: DevicePreference,
     slug: Option<String>,
+    program_id: Option<String>,
     spec: Option<String>,
     compiler: Option<String>,
     ephemeral: bool,
     _marker: PhantomData<State>,
 }
 
-// ── Common methods (any state) ──────────────────────────────────────
-
 impl<State> PawFnBuilder<State> {
-    pub fn config(mut self, config: PawConfig) -> Self {
-        self.config = config;
-        self
-    }
+    pub fn config(mut self, config: PawConfig) -> Self { self.config = config; self }
+}
 
-    pub fn device(mut self, device: DevicePreference) -> Self {
-        self.device = device;
-        self
+impl PawFnBuilder<Unset> {
+    pub fn builder() -> Self { Self::default() }
+    pub fn new() -> Self { Self::default() }
+
+    pub fn compiler(mut self, compiler: impl Into<String>) -> Self {
+        self.compiler = Some(compiler.into()); self
+    }
+    pub fn ephemeral(mut self, e: bool) -> Self { self.ephemeral = e; self }
+    pub fn slug(self, slug: impl Into<String>) -> PawFnBuilder<ForLoad> {
+        PawFnBuilder {
+            config: self.config, slug: Some(slug.into()), program_id: None,
+            spec: None, compiler: self.compiler, ephemeral: self.ephemeral,
+            _marker: PhantomData,
+        }
+    }
+    pub fn id(self, program_id: impl Into<String>) -> PawFnBuilder<ForLoad> {
+        PawFnBuilder {
+            config: self.config, program_id: Some(program_id.into()), slug: None,
+            spec: None, compiler: self.compiler, ephemeral: self.ephemeral,
+            _marker: PhantomData,
+        }
+    }
+    pub fn spec(self, spec: impl Into<String>) -> PawFnBuilder<ForCompile> {
+        PawFnBuilder {
+            config: self.config, slug: None, program_id: None, spec: Some(spec.into()),
+            compiler: self.compiler, ephemeral: self.ephemeral,
+            _marker: PhantomData,
+        }
     }
 }
 
-// ── Initial state — transitions ─────────────────────────────────────
-
-impl PawFnBuilder<Unset> {
-    /// Start building a [`PawFn`]. Equivalent to [`PawFnBuilder::new`].
-    pub fn builder() -> Self {
-        Self::new()
-    }
-
-    pub fn new() -> Self {
+impl Default for PawFnBuilder<Unset> {
+    fn default() -> Self {
         Self {
-            config: PawConfig::from_env(),
-            device: DevicePreference::Auto,
-            slug: None,
-            spec: None,
-            compiler: None,
-            ephemeral: false,
-            _marker: PhantomData,
-        }
-    }
-
-    pub fn compiler(mut self, compiler: impl Into<String>) -> Self {
-        self.compiler = Some(compiler.into());
-        self
-    }
-
-    pub fn ephemeral(mut self, ephemeral: bool) -> Self {
-        self.ephemeral = ephemeral;
-        self
-    }
-
-    pub fn slug(self, slug: impl Into<String>) -> PawFnBuilder<ForLoad> {
-        PawFnBuilder {
-            config: self.config,
-            device: self.device,
-            slug: Some(slug.into()),
-            spec: None,
-            compiler: self.compiler,
-            ephemeral: self.ephemeral,
-            _marker: PhantomData,
-        }
-    }
-
-    pub fn spec(self, spec: impl Into<String>) -> PawFnBuilder<ForCompile> {
-        PawFnBuilder {
-            config: self.config,
-            device: self.device,
-            slug: None,
-            spec: Some(spec.into()),
-            compiler: self.compiler,
-            ephemeral: self.ephemeral,
-            _marker: PhantomData,
+            config: PawConfig::from_env(), slug: None, program_id: None,
+            spec: None, compiler: None, ephemeral: false, _marker: PhantomData,
         }
     }
 }
 
 // ── Load mode ──────────────────────────────────────────────────────
 
+#[cfg(any(feature = "candle", feature = "llamacpp"))]
 impl PawFnBuilder<ForLoad> {
     pub async fn load(self) -> Result<Box<dyn PawFnTrait>, Error> {
-        let slug = self.slug.expect("slug must be set in ForLoad state");
         let client = PawClient::new(&self.config);
-        let program_id = client.resolve_slug(&slug).await?;
+        let program_id = match (self.slug.as_deref(), self.program_id.as_deref()) {
+            (Some(slug), _) => client.resolve_slug(slug).await?,
+            (_, Some(id)) => id.to_string(),
+            (None, None) => return Err(Error::Other("requires .slug() or .id() before .load()".into())),
+        };
         let dir = client.download_paw(&program_id).await?;
         download_assets(&self.config, &dir).await?;
-        let inner = PawFnLoader::new(dir)
-            .config(PawCandleConfig::builder().core(self.config).device(self.device).build())
-            .load()?;
-        Ok(Box::new(inner))
+
+        cfg_backend_load!(self, dir)
     }
 }
 
@@ -230,42 +187,53 @@ impl PawFnBuilder<ForLoad> {
 
 impl PawFnBuilder<ForCompile> {
     pub fn compiler(mut self, compiler: impl Into<String>) -> Self {
-        self.compiler = Some(compiler.into());
-        self
+        self.compiler = Some(compiler.into()); self
     }
-
-    pub fn ephemeral(mut self, ephemeral: bool) -> Self {
-        self.ephemeral = ephemeral;
-        self
-    }
+    pub fn ephemeral(mut self, e: bool) -> Self { self.ephemeral = e; self }
 
     pub async fn compile(self) -> Result<Box<dyn PawFnTrait>, Error> {
-        let spec = self.spec.expect("spec must be set in ForCompile state");
+        let spec = self.spec.expect("spec must be set for ForCompile");
         let request = {
             let mut b = CompileRequest::builder().spec(spec).ephemeral(self.ephemeral);
-            if let Some(ref c) = self.compiler {
-                b = b.compiler(c);
-            }
+            if let Some(ref c) = self.compiler { b = b.compiler(c); }
             b.build()?
         };
-
         let client = PawClient::new(&self.config);
         let program = client.compile(request).await?;
         let dir = client.download_paw(&program.id).await?;
         download_assets(&self.config, &dir).await?;
-        let inner = PawFnLoader::new(dir)
-            .config(PawCandleConfig::builder().core(self.config).device(self.device).build())
-            .load()?;
-        Ok(Box::new(inner))
+
+        cfg_backend_load!(self, dir)
     }
 }
 
-// ── Shared helpers ────────────────────────────────────────────────────
+// ── Shared helpers ─────────────────────────────────────────────────
 
-async fn download_assets(
-    config: &PawConfig,
-    program_dir: &std::path::Path,
-) -> Result<(), Error> {
+async fn download_assets(config: &PawConfig, program_dir: &std::path::Path) -> Result<(), Error> {
     let bundle = paw_core::PawBundle::load_from_dir(program_dir)?;
-    paw_candle::ensure_assets(config, program_dir, bundle.interpreter_model()).await
+    let interpreter = bundle.interpreter_model();
+
+    #[cfg(feature = "candle")]
+    paw_candle::ensure_assets(config, program_dir, interpreter).await?;
+
+    #[cfg(all(feature = "llamacpp", not(feature = "candle")))]
+    ensure_gguf_cached(config, interpreter)?;
+
+    Ok(())
+}
+
+#[cfg(all(feature = "llamacpp", not(feature = "candle")))]
+fn ensure_gguf_cached(config: &PawConfig, interpreter: &str) -> Result<(), Error> {
+    use paw_core::cache::known_models;
+    let file_name = known_models::interpreter_to_gguf(interpreter)
+        .map(|(_, f)| f)
+        .ok_or_else(|| Error::UnsupportedModel(interpreter.to_string()))?;
+    let gguf_path = config.base_models_dir().join(file_name);
+    if !gguf_path.exists() {
+        return Err(Error::Cache(format!(
+            "GGUF not cached at {}. Run with candle backend first or download manually.",
+            gguf_path.display()
+        )));
+    }
+    Ok(())
 }

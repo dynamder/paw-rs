@@ -213,32 +213,14 @@ async fn cmd_compile(spec: &str, compiler: Option<&str>, slug: Option<&str>, pri
 
 async fn cmd_run(program_ref: &str, input: &str, max_tokens: Option<usize>, temperature: Option<f64>, json: bool) -> Result<i32, paw_core::Error> {
     let config = PawConfig::from_env();
-    let client = PawClient::new(&config);
 
-    // 1. Resolve slug → program ID
-    let program_id = match client.resolve_slug(program_ref).await {
-        Ok(id) => id,
-        Err(_) => program_ref.to_string(), // not a slug, treat as raw program ID
-    };
+    let mut func = paw_rs::PawFnBuilder::builder()
+        .config(config)
+        .slug(program_ref)
+        .load()
+        .await?;
 
-    // 2. Download/refresh program bundle
-    let dir = client.download_paw(&program_id).await?;
-
-    // 3. Ensure base model GGUF + tokenizer are cached locally
-    let bundle = paw_core::PawBundle::load_from_dir(&dir)?;
-    let interpreter = bundle.interpreter_model();
-    paw_candle::ensure_assets(&config, &dir, interpreter).await?;
-
-    // 4. Load model via PawFnLoader
-    let candle_config = paw_candle::PawCandleConfig::builder()
-        .core(config)
-        .build();
-    let inner = paw_candle::PawFnLoader::new(dir)
-        .config(candle_config)
-        .load()?;
-    let mut func = paw_rs::PawFn::<paw_candle::Dynamic>::from_inner(inner);
-
-    let opts = paw_candle::PawRuntimeOptions {
+    let opts = paw_core::PawRuntimeOptions {
         max_tokens,
         temperature: temperature.unwrap_or(0.0),
         ..Default::default()

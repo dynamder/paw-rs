@@ -4,8 +4,6 @@
 //!
 //! ## Quick Start
 //!
-//! ### Run an existing program (dynamic dispatch)
-//!
 //! ```rust,no_run
 //! use paw_rs::prelude::*;
 //!
@@ -20,51 +18,25 @@
 //! # }
 //! ```
 //!
-//! ### Static typing with model sharing
-//!
-//! ```rust,no_run
-//! use paw_rs::prelude::*;
-//! use paw_rs::paw_candle::Qwen3_0_6B;
-//!
-//! # async fn example() -> std::result::Result<(), paw_core::Error> {
-//! let mut a = PawFn::<Qwen3_0_6B>::load_slug("email-triage").await?;
-//! let mut b = PawFn::<Qwen3_0_6B>::compile_spec(
-//!     "Classify sentiment", "paw-4b-qwen3-0.6b",
-//! ).await?;
-//! let r1 = a.run("Urgent: server is down!")?;
-//! let r2 = b.run("I love this product!")?;
-//! # Ok(())
-//! # }
-//! ```
-//!
-//! ## Examples
-//!
-//! See `paw-rs/examples/` for runnable examples:
-//!
-//! - `high_level.rs` — Type-state builder: compile → infer in one call
-//! - `low_level.rs` — Manual 6-step pipeline with PawClient + PawFnLoader
-//!
-//! ```bash
-//! PAW_API_KEY=paw_sk_... cargo run --example high_level -p paw-rs
-//! PAW_API_KEY=paw_sk_... cargo run --example low_level -p paw-rs
-//! ```
-//!
 //! ## CLI
 //!
-//! The crate also ships the `paw-rs` binary — see `README.md` or run `paw-rs --help` for usage.
+//! The crate also ships the `paw-rs` binary — run `paw-rs --help` for usage.
 
+#[cfg(feature = "candle")]
 pub use paw_candle;
+#[cfg(feature = "llamacpp")]
+pub use paw_llamacpp;
 pub use paw_core;
 
 pub mod function;
 pub mod prelude;
 
-pub use function::{PawFn, PawFnBuilder};
+pub use function::PawFnBuilder;
+#[cfg(feature = "candle")]
+pub use function::PawFn;
 
 #[cfg(test)]
 mod tests {
-    use paw_candle::{DevicePreference, PawRuntimeOptions, Qwen3_0_6B};
-
     use super::*;
 
     #[test]
@@ -103,14 +75,13 @@ mod tests {
     }
 
     #[test]
-    fn test_builder_config_and_device_passed_through() {
+    fn test_builder_config_passed_through() {
         let config = paw_core::PawConfig::builder()
             .api_url("https://test.example.com")
             .build()
             .unwrap();
         let b = PawFnBuilder::builder()
             .config(config)
-            .device(DevicePreference::Cpu)
             .slug("test");
         let _: PawFnBuilder<function::ForLoad> = b;
     }
@@ -122,27 +93,25 @@ mod tests {
             .spec("test");
     }
 
+    #[cfg(feature = "candle")]
     #[test]
     fn test_paw_fn_from_inner_type() {
-        fn _take_from_inner(f: fn(paw_candle::PawFunction) -> PawFn<Qwen3_0_6B>) { let _ = f; }
+        fn _take_from_inner(f: fn(paw_candle::PawFunction) -> PawFn<paw_candle::Qwen3_0_6B>) {
+            let _ = f;
+        }
         _take_from_inner(PawFn::from_inner);
     }
 
+    #[cfg(feature = "candle")]
     #[test]
     fn test_paw_fn_send() {
         fn _assert_send<T: Send>() {}
-        _assert_send::<PawFn<Qwen3_0_6B>>();
-    }
-
-    #[test]
-    fn test_paw_fn_send_dynamic() {
-        fn _assert_send<T: Send>() {}
-        _assert_send::<PawFn<paw_candle::Dynamic>>();
+        _assert_send::<PawFn<paw_candle::Qwen3_0_6B>>();
     }
 
     #[test]
     fn test_runtime_options_default() {
-        let opts = PawRuntimeOptions::default();
+        let opts = paw_core::PawRuntimeOptions::default();
         assert_eq!(opts.max_tokens, None);
         assert_eq!(opts.temperature, 0.0);
         assert_eq!(opts.top_p, 1.0);
@@ -150,7 +119,7 @@ mod tests {
 
     #[test]
     fn test_runtime_options_custom() {
-        let opts = PawRuntimeOptions {
+        let opts = paw_core::PawRuntimeOptions {
             max_tokens: Some(100),
             temperature: 0.7,
             top_p: 0.9,
@@ -171,6 +140,5 @@ mod tests {
     #[test]
     fn test_paw_core_reexported() {
         let _config = paw_core::PawConfig::from_env();
-        let _ = paw_candle::PawCandleConfig::default();
     }
 }

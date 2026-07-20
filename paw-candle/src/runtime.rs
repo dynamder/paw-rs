@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 
 use candle_core::{Device, Tensor};
 use candle_nn::ops::softmax;
-use paw_core::{Error, PawBundle};
+use paw_core::{Error, PawBundle, PawFnTrait, PawRuntimeOptions};
 use tracing::{debug, info};
 
 use crate::config::{DevicePreference, PawCandleConfig};
@@ -11,37 +11,6 @@ use crate::kv_cache::PrefixKvCache;
 use crate::lora::GgufLoraAdapter;
 use crate::models::{gpt2::Gpt2Model, qwen3::Qwen3Model, QuantizedModel};
 use crate::tokenizer::Tokenizer;
-
-// ── Runtime options ────────────────────────────────────────────────────
-
-/// Sampling and generation parameters for inference.
-#[derive(Debug, Clone)]
-pub struct PawRuntimeOptions {
-    /// Maximum tokens to generate (`None` = up to context limit).
-    pub max_tokens: Option<usize>,
-    /// Sampling temperature (`0.0` = greedy decoding).
-    pub temperature: f64,
-    /// Top-p nucleus sampling (`1.0` = disabled).
-    pub top_p: f64,
-}
-
-impl Default for PawRuntimeOptions {
-    fn default() -> Self {
-        Self {
-            max_tokens: None,
-            temperature: 0.0,
-            top_p: 1.0,
-        }
-    }
-}
-
-// ── PawFnTrait (dynamic dispatch) ──────────────────────────────────────
-
-pub trait PawFnTrait: Send {
-    fn run(&mut self, input: &str) -> Result<String, Error>;
-    fn run_with(&mut self, input: &str, opts: &PawRuntimeOptions) -> Result<String, Error>;
-    fn interpreter(&self) -> &str;
-}
 
 // ── PawFunction (inference runtime) ────────────────────────────────────
 

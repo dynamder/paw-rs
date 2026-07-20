@@ -4579,6 +4579,7 @@ dependencies = [
  "hf-hub 1.0.0",
  "paw-candle",
  "paw-core",
+ "paw-llamacpp",
  "rpassword",
  "serde",
  "serde_json",

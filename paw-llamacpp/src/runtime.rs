@@ -10,7 +10,7 @@ use llama_cpp_2::model::params::LlamaModelParams;
 use llama_cpp_2::model::{AddBos, LlamaLoraAdapter, LlamaModel};
 use llama_cpp_2::sampling::LlamaSampler;
 use llama_cpp_2::token::LlamaToken;
-use paw_core::{Error, PawBundle};
+use paw_core::{Error, PawBundle, PawFnTrait, PawRuntimeOptions};
 use tracing::info;
 
 use crate::config::PawLlamaCppConfig;
@@ -21,23 +21,6 @@ fn eos_from_gguf(model: &LlamaModel) -> u32 {
         .ok()
         .and_then(|s| s.parse::<u32>().ok())
         .unwrap_or(0)
-}
-
-#[derive(Debug, Clone)]
-pub struct PawRuntimeOptions {
-    pub max_tokens: Option<usize>,
-    pub temperature: f64,
-    pub top_p: f64,
-}
-
-impl Default for PawRuntimeOptions {
-    fn default() -> Self {
-        Self {
-            max_tokens: None,
-            temperature: 0.0,
-            top_p: 1.0,
-        }
-    }
 }
 
 #[allow(dead_code)]
@@ -58,6 +41,7 @@ pub struct PawFunction {
     n_prefix: usize,
     prefix_evaluated: RefCell<bool>,
     eos_token_id: u32,
+    interpreter: String,
 }
 
 impl Drop for PawFunction {
@@ -178,6 +162,18 @@ impl PawFunction {
     }
 }
 
+impl PawFnTrait for PawFunction {
+    fn run(&mut self, input: &str) -> Result<String, Error> {
+        PawFunction::run(self, input, &PawRuntimeOptions::default())
+    }
+    fn run_with(&mut self, input: &str, opts: &PawRuntimeOptions) -> Result<String, Error> {
+        PawFunction::run(self, input, opts)
+    }
+    fn interpreter(&self) -> &str {
+        &self.interpreter
+    }
+}
+
 pub struct PawFnLoader {
     program_dir: PathBuf,
     config: PawLlamaCppConfig,
@@ -281,6 +277,7 @@ impl PawFnLoader {
             n_prefix,
             prefix_evaluated: RefCell::new(false),
             eos_token_id,
+            interpreter: bundle.interpreter_model().to_string(),
         };
 
         // Now create context from model already in PawFunction

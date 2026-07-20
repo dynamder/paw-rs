@@ -104,6 +104,8 @@ pub mod error;
 pub mod format;
 pub mod types;
 pub mod prelude;
+pub mod runtime;
+
 
 // Re-exports for convenience
 pub use bundle::PawBundle;
@@ -115,6 +117,7 @@ pub use format::{
     ExamplePair, GenerationConfig, LoRAConfig, PawFileMeta, PawFormatReader, PawFormatWriter,
     TensorData,
 };
+pub use runtime::{PawFnTrait, PawRuntimeOptions};
 pub use types::*;
 
 /// High-level convenience: compile a spec on the PAW server.

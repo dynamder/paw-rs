@@ -49,7 +49,8 @@ pub use config::PawCandleConfigBuilder;
 pub use config::{DevicePreference, PawCandleConfig};
 pub use interpreter::{get_or_load_model, Dynamic, Gpt2, InterpreterModel, Qwen3_0_6B};
 pub use paw_core;
-pub use runtime::{ensure_assets, PawFnLoader, PawFunction, PawFnTrait, PawRuntimeOptions};
+pub use paw_core::{PawFnTrait, PawRuntimeOptions};
+pub use runtime::{ensure_assets, PawFnLoader, PawFunction};
 
 pub use lora::{GgufLoraAdapter, LoraLayer};
 
@@ -59,6 +60,7 @@ pub mod prelude {
     pub use super::config::{DevicePreference, PawCandleConfig, PawCandleConfigBuilder};
     pub use super::interpreter::{Gpt2, InterpreterModel, Qwen3_0_6B};
     pub use super::lora::{GgufLoraAdapter, LoraLayer};
-    pub use super::runtime::{PawFnLoader, PawFunction, PawFnTrait, PawRuntimeOptions};
+    pub use super::runtime::{PawFnLoader, PawFunction};
+    pub use paw_core::{PawFnTrait, PawRuntimeOptions};
     pub use paw_core::prelude::*;
 }

@@ -11,7 +11,8 @@ documentation.workspace = true
 
 [dependencies]
 paw-core = { version = "0.1", path = "../paw-core" }
-paw-candle = { version = "0.1", path = "../paw-candle" }
+paw-candle = { version = "0.1", path = "../paw-candle", optional = true }
+paw-llamacpp = { version = "0.1", path = "../paw-llamacpp", optional = true }
 hf-hub = "1.0"
 thiserror = "2"
 
@@ -27,7 +28,15 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 name = "paw-rs"
 path = "src/bin/paw-rs.rs"
 
+[[example]]
+name = "typed_api"
+required-features = ["candle"]
+
 [features]
-default = []
-cuda = ["paw-candle/cuda"]
-metal = ["paw-candle/metal"]
+default = ["llamacpp"]
+candle = ["paw-candle"]
+llamacpp = ["paw-llamacpp"]
+cuda   = ["paw-candle?/cuda",   "paw-llamacpp?/cuda"]
+metal  = ["paw-candle?/metal",  "paw-llamacpp?/metal"]
+mkl    = ["paw-candle?/mkl"]
+accelerate = ["paw-candle?/accelerate"]
