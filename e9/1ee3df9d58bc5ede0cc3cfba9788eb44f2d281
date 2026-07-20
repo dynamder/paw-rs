@@ -1,0 +1,29 @@
+paw-candle/Cargo.toml
+  s_49ae7ceabb4fd4::t_ae9494b2fbd173 23
+Cargo.toml
+  s_49ae7ceabb4fd4::t_e71cb57d282f11 6
+paw-rs/Cargo.toml
+  s_49ae7ceabb4fd4::t_ae9494b2fbd173 13-15
+paw-llamacpp/Cargo.toml
+  s_49ae7ceabb4fd4::t_ae9494b2fbd173 19
+paw-mistralrs/Cargo.toml
+  s_49ae7ceabb4fd4::t_ae9494b2fbd173 18
+Cargo.lock
+  s_49ae7ceabb4fd4::t_b7759a7d99fc7a 4508,4529,4546,4558,4576
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "e91ee3df9d58bc5ede0cc3cfba9788eb44f2d281",
+  "prompts": {},
+  "sessions": {
+    "s_49ae7ceabb4fd4": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_082221e4bffeWZAa8KbyXkAEhd",
+        "model": "unknown"
+      },
+      "human_author": "dynamder <igaster@163.com>"
+    }
+  }
+}
