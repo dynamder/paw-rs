@@ -261,7 +261,7 @@ impl PawFnLoader {
         bundle: PawBundle,
         backend: LlamaBackend,
         model: LlamaModel,
-        mut adapter: Option<LlamaLoraAdapter>,
+        adapter: Option<LlamaLoraAdapter>,
     ) -> Result<PawFunction, Error> {
         let n_ctx = self.config.core.n_ctx() as usize;
         let (prefix_text, suffix_text) = bundle.split_template();
@@ -270,6 +270,23 @@ impl PawFnLoader {
             .str_to_token(&prefix_text, AddBos::Never)
             .map_err(|e| Error::Other(format!("tokenize prefix: {e}")))?;
 
+        let eos_token_id = eos_from_gguf(&model);
+
+        // Build the PawFunction FIRST so model/backend are in their final position
+        let mut pf = PawFunction {
+            bundle: ModelBundle { model, backend },
+            adapter: RefCell::new(adapter),
+            ctx: RefCell::new(None),
+            n_ctx,
+            seed: self.config.seed,
+            prefix_text,
+            suffix_text,
+            prefix_tokens,
+            prefix_evaluated: RefCell::new(false),
+            eos_token_id,
+        };
+
+        // NOW create the context from the model already inside PawFunction
         let mut cp = LlamaContextParams::default().with_n_ctx(Some(
             NonZeroU32::new(n_ctx as u32).unwrap_or(NonZeroU32::new(2048).unwrap()),
         ));
@@ -280,41 +297,32 @@ impl PawFnLoader {
             cp = cp.with_n_threads_batch(t);
         }
 
-        let ctx = model
-            .new_context(&backend, cp)
+        let ctx = pf
+            .bundle
+            .model
+            .new_context(&pf.bundle.backend, cp)
             .map_err(|e| Error::Other(format!("new_context: {e}")))?;
 
-        if let Some(ref mut a) = adapter {
+        if let Some(ref mut a) = *pf.adapter.borrow_mut() {
             ctx.lora_adapter_set(a, 1.0)
                 .map_err(|e| Error::Other(format!("lora set: {e}")))?;
             info!("LoRA applied");
         }
 
         let ctx: LlamaContext<'static> = unsafe { std::mem::transmute(ctx) };
+        *pf.ctx.borrow_mut() = Some(ctx);
 
-        let eos_token_id = eos_from_gguf(&model);
         info!(
             "Program loaded: model={}, prefix={} tokens, eos={}{}",
             bundle.interpreter_model(),
-            prefix_tokens.len(),
+            pf.prefix_tokens.len(),
             eos_token_id,
-            if adapter.is_some() {
+            if pf.adapter.borrow().is_some() {
                 " (with LoRA)"
             } else {
                 ""
             },
         );
-        Ok(PawFunction {
-            bundle: ModelBundle { model, backend },
-            adapter: RefCell::new(adapter),
-            ctx: RefCell::new(Some(ctx)),
-            n_ctx,
-            seed: self.config.seed,
-            prefix_text,
-            suffix_text,
-            prefix_tokens,
-            prefix_evaluated: RefCell::new(false),
-            eos_token_id,
-        })
+        Ok(pf)
     }
 }
