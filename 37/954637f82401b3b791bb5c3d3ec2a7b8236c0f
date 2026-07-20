@@ -1,0 +1,68 @@
+paw-candle/src/models/qwen3.rs
+  s_49ae7ceabb4fd4::t_0449b4c8e222b7 482-493
+paw-candle/src/models/gpt2.rs
+  s_49ae7ceabb4fd4::t_56b8f53c9f22d0 377-385
+paw-rs/src/function.rs
+  s_49ae7ceabb4fd4::t_7ba4294ac3d933 225,259,270
+  s_49ae7ceabb4fd4::t_1be4f0bb2b968f 25-29,31,33-34
+  s_49ae7ceabb4fd4::t_7cb9e5b5f1fa53 30,32
+  s_49ae7ceabb4fd4::t_714b18c71dab0d 24
+  s_49ae7ceabb4fd4::t_55157873a9e661 161-165
+  s_49ae7ceabb4fd4::t_3b5320d9e000cf 3-7,22-23,36,39,42-45,57-128,133,216,242,265-269
+paw-candle/src/models.rs
+  s_49ae7ceabb4fd4::t_c1bd8a6bf1df36 176-178
+paw-candle/src/lib.rs
+  s_49ae7ceabb4fd4::t_53341ccf7be441 50
+  s_49ae7ceabb4fd4::t_51db82175efc8a 40,52,60,62
+paw-candle/src/interpreter.rs
+  s_49ae7ceabb4fd4::t_7c6b8b63641b10 26-32
+  s_49ae7ceabb4fd4::t_a0f4821d9d5683 54-72
+  s_49ae7ceabb4fd4::t_b30e52023f0af3 1-25,33-53,73-90
+paw-candle/src/runtime.rs
+  s_49ae7ceabb4fd4::t_4fcf387d87cad4 394,397-401,408-409,425-427,435-436,438,441,443,460
+  s_49ae7ceabb4fd4::t_3a5fee0d728674 402-406,429
+  s_49ae7ceabb4fd4::t_125e00f46967d8 309,567-571
+  s_49ae7ceabb4fd4::t_cd118be5f2c597 2
+  s_49ae7ceabb4fd4::t_deb043aa6a95d1 308,357-367
+  s_49ae7ceabb4fd4::t_2a49445cf9a782 38-45,53,64
+  s_49ae7ceabb4fd4::t_19884c8121c23f 108,118,131,135-138,145-151,156,171,178,204,221,237,245,270,286,289,299-307
+  s_957772f1a40f4a::t_646fcca63ffb3a 310
+paw-rs/src/bin/paw-rs.rs
+  s_49ae7ceabb4fd4::t_bd53e764f34614 239
+paw-rs/src/lib.rs
+  s_49ae7ceabb4fd4::t_39c201009e0b5e 166-168
+  s_49ae7ceabb4fd4::t_30be61096af7c0 127
+  s_49ae7ceabb4fd4::t_8eb932871e092d 7,23,27,30-35,66
+  s_49ae7ceabb4fd4::t_e6852470f8c054 13
+  s_49ae7ceabb4fd4::t_2d47125dde98c3 42,44-45,54
+  s_49ae7ceabb4fd4::t_eecc1e02c3797c 72,78,84,90,97,100,111,120,134,137-140
+  s_49ae7ceabb4fd4::t_e6a14744ac6fa1 141
+paw-rs/examples/high_level.rs
+  s_49ae7ceabb4fd4::t_66af9579aaaa85 17
+Cargo.lock
+  s_957772f1a40f4a::t_62c4549c3d8feb 4388,4409,4426,4443,4461
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "37954637f82401b3b791bb5c3d3ec2a7b8236c0f",
+  "prompts": {},
+  "sessions": {
+    "s_49ae7ceabb4fd4": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_082221e4bffeWZAa8KbyXkAEhd",
+        "model": "unknown"
+      },
+      "human_author": "dynamder <igaster@163.com>"
+    },
+    "s_957772f1a40f4a": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_089d38bd6ffeB61zAK8mtMXpFF",
+        "model": "unknown"
+      },
+      "human_author": "dynamder <igaster@163.com>"
+    }
+  }
+}
