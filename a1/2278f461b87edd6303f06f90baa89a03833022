@@ -1,0 +1,22 @@
+paw-llamacpp/src/runtime.rs
+  s_49ae7ceabb4fd4::t_2445249c75f922 265,271
+  s_49ae7ceabb4fd4::t_b6596b5537d829 43,49,52,58,98,106,127,275,281,286,303,315
+  s_49ae7ceabb4fd4::t_7f640f6ebbd63c 65-66,317
+  s_49ae7ceabb4fd4::t_448bebcc91210b 104
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "a12278f461b87edd6303f06f90baa89a03833022",
+  "prompts": {},
+  "sessions": {
+    "s_49ae7ceabb4fd4": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_082221e4bffeWZAa8KbyXkAEhd",
+        "model": "unknown"
+      },
+      "human_author": "dynamder <igaster@163.com>"
+    }
+  }
+}
