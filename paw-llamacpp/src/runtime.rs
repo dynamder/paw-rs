@@ -2,8 +2,8 @@ use std::cell::RefCell;
 use std::num::NonZeroU32;
 use std::path::PathBuf;
 
-use llama_cpp_2::context::params::LlamaContextParams;
 use llama_cpp_2::context::LlamaContext;
+use llama_cpp_2::context::params::LlamaContextParams;
 use llama_cpp_2::llama_backend::LlamaBackend;
 use llama_cpp_2::llama_batch::LlamaBatch;
 use llama_cpp_2::model::params::LlamaModelParams;
@@ -96,7 +96,7 @@ impl PawFunction {
                     .map_err(|e| Error::Other(format!("prefix eval: {e}")))?;
             }
             *self.prefix_evaluated.borrow_mut() = true;
-            info!("Prefix evaluated and cached ({} tokens)", n_prefix);
+            //info!("Prefix evaluated and cached ({} tokens)", n_prefix);
         }
 
         let _ = ctx.clear_kv_cache_seq(Some(0), Some(n_prefix as u32), None);
@@ -220,7 +220,7 @@ impl PawFnLoader {
                 gguf_path.display()
             )));
         }
-        info!("Loading GGUF: {}", gguf_path.display());
+        //info!("Loading GGUF: {}", gguf_path.display());
         let backend = LlamaBackend::init().map_err(|e| Error::Other(format!("backend: {e}")))?;
         let n_layers = self.config.n_gpu_layers.max(0) as u32;
         let mp = if n_layers > 0 {
@@ -230,13 +230,13 @@ impl PawFnLoader {
         };
         let model = LlamaModel::load_from_file(&backend, &gguf_path, &mp)
             .map_err(|e| Error::Other(format!("model load: {e}")))?;
-        info!("Model loaded ({} params)", model.n_params());
+        //info!("Model loaded ({} params)", model.n_params());
 
         let adapter = if bundle.adapter_path.exists() {
-            info!("Loading LoRA adapter: {}", bundle.adapter_path.display());
+            //info!("Loading LoRA adapter: {}", bundle.adapter_path.display());
             match model.lora_adapter_init(&bundle.adapter_path) {
                 Ok(a) => {
-                    info!("LoRA adapter loaded");
+                    //info!("LoRA adapter loaded");
                     Some(a)
                 }
                 Err(e) => {
@@ -301,23 +301,23 @@ impl PawFnLoader {
         if let Some(ref mut a) = pf.adapter {
             ctx.lora_adapter_set(a, 1.0)
                 .map_err(|e| Error::Other(format!("lora set: {e}")))?;
-            info!("LoRA applied");
+            //info!("LoRA applied");
         }
 
         let ctx: LlamaContext<'static> = unsafe { std::mem::transmute(ctx) };
         *pf.ctx.borrow_mut() = Some(ctx);
 
-        info!(
-            "Program loaded: model={}, prefix={} tokens, eos={}{}",
-            bundle.interpreter_model(),
-            n_prefix,
-            eos_token_id,
-            if pf.adapter.is_some() {
-                " (with LoRA)"
-            } else {
-                ""
-            },
-        );
+        // info!(
+        //     "Program loaded: model={}, prefix={} tokens, eos={}{}",
+        //     bundle.interpreter_model(),
+        //     n_prefix,
+        //     eos_token_id,
+        //     if pf.adapter.is_some() {
+        //         " (with LoRA)"
+        //     } else {
+        //         ""
+        //     },
+        // );
         Ok(pf)
     }
 }
