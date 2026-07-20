@@ -1,0 +1,70 @@
+paw-rs/src/bin/paw-rs.rs
+  s_49ae7ceabb4fd4::t_926280a4130ead 217,219-220,223
+  s_49ae7ceabb4fd4::t_2161d597ebca28 218,221
+paw-candle/src/runtime.rs
+  s_49ae7ceabb4fd4::t_201909f5b80ccd 6
+paw-core/src/runtime.rs
+  s_49ae7ceabb4fd4::t_715384fd84bd39 1-24
+paw-llamacpp/src/lib.rs
+  s_49ae7ceabb4fd4::t_543e94f8a12bb9 6-7
+  s_49ae7ceabb4fd4::t_ccefd60ab2a30b 13
+paw-core/src/prelude.rs
+  s_49ae7ceabb4fd4::t_32793dcadb75ac 15
+paw-core/src/lib.rs
+  s_49ae7ceabb4fd4::t_f1ce788f404193 107-108
+  s_49ae7ceabb4fd4::t_4070b38443988c 120
+paw-rs/src/lib.rs
+  s_49ae7ceabb4fd4::t_c9893c734d9c7f 23,25,27-28,34-36,78,96,99-101,105,109,114,122
+paw-rs/src/prelude.rs
+  s_49ae7ceabb4fd4::t_b9febf10fa5a86 1-4,6-8
+paw-rs/src/function.rs
+  s_49ae7ceabb4fd4::t_cbf98bea4dbaee 117
+  s_49ae7ceabb4fd4::t_67c2e5c66a182b 5
+  s_49ae7ceabb4fd4::t_642a9f75c85a48 129
+  s_49ae7ceabb4fd4::t_4abaa25c3ca5dd 152
+  s_49ae7ceabb4fd4::t_9fb20413f6e7c8 170
+  s_49ae7ceabb4fd4::t_c0b006226f5e7a 4,23-24,26-27
+  s_49ae7ceabb4fd4::t_4eec643429c392 174-178
+  s_49ae7ceabb4fd4::t_7772eb1c13e1c3 37,39-42,46-49,65,77,80,84,88,98,101,105-109,125,130,133,135,153,159-161,166,181,190,192,195,198,205,210,212,214-218,220-223
+  s_49ae7ceabb4fd4::t_27a0d0d2815bb8 138-146,164
+  s_49ae7ceabb4fd4::t_c81c8c61436f12 165,224,226-238
+  s_49ae7ceabb4fd4::t_4fb7723cd2a124 6-22,25
+  s_49ae7ceabb4fd4::t_0a6de51fba9aaf 182
+  s_49ae7ceabb4fd4::t_195a608cbdca78 3
+  s_49ae7ceabb4fd4::t_a4d1910a785e58 225
+  s_49ae7ceabb4fd4::t_c21d43f9c3d201 219
+  s_49ae7ceabb4fd4::t_34aba5e17c826d 162-163
+  s_49ae7ceabb4fd4::t_69ed1457f4e36e 206
+  s_49ae7ceabb4fd4::t_0266da4cfaffed 167
+paw-llamacpp/src/runtime.rs
+  s_49ae7ceabb4fd4::t_1ffbd8fd268959 13
+  s_49ae7ceabb4fd4::t_dedcf8c6f892d0 280
+  s_49ae7ceabb4fd4::t_b9fdd64b4f394d 44
+  s_49ae7ceabb4fd4::t_de2968550baed5 165-176
+paw-rs/examples/low_level.rs
+  s_49ae7ceabb4fd4::t_b8251e7878d972 1,5,7,10,13-17,20-21
+paw-candle/src/lib.rs
+  s_49ae7ceabb4fd4::t_2f5392d5654ea6 63-64
+  s_49ae7ceabb4fd4::t_b488c866844148 52-53
+paw-rs/Cargo.toml
+  s_49ae7ceabb4fd4::t_766973acabab67 31-34
+  s_49ae7ceabb4fd4::t_e92e8360b68719 14-15,36-42
+Cargo.lock
+  s_49ae7ceabb4fd4::t_a14fd0fd72f9ef 4582
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "f5c4368ed2b75d27f2596275dff26296b1cf18f9",
+  "prompts": {},
+  "sessions": {
+    "s_49ae7ceabb4fd4": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_082221e4bffeWZAa8KbyXkAEhd",
+        "model": "unknown"
+      },
+      "human_author": "dynamder <igaster@163.com>"
+    }
+  }
+}
