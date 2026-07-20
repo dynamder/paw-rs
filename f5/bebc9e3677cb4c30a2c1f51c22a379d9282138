@@ -1,0 +1,21 @@
+paw-candle/Cargo.toml
+  s_49ae7ceabb4fd4::t_7c38030b0de40f 19-20
+Cargo.lock
+  s_49ae7ceabb4fd4::t_dc2f0c740e2c65 15-20,333-338,672,680,1606-1614,1621-1633,1644,1924-1933,2480-2490,3120-3141,3832,4274-4315,5183-5193,5882-5890,6255-6260,6279-6291,6568-6578,6985-6996,7005-7006,7012-7020,7030-7043,7053-7058,8281-8283,8309-8318
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "f5bebc9e3677cb4c30a2c1f51c22a379d9282138",
+  "prompts": {},
+  "sessions": {
+    "s_49ae7ceabb4fd4": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_082221e4bffeWZAa8KbyXkAEhd",
+        "model": "unknown"
+      },
+      "human_author": "dynamder <igaster@163.com>"
+    }
+  }
+}
