@@ -12,7 +12,10 @@ pub use crate::error::{Error, Result};
 pub use crate::format::{
     GenerationConfig, LoRAConfig, PawFileMeta, PawFormatReader, PawFormatWriter, TensorData,
 };
-pub use crate::runtime::{PawFnTrait, PawRuntimeOptions};
+pub use crate::runtime::{
+    Backend, Candle, Dynamic, DynamicBackend, Gpt2, InterpreterModel, LlamaCpp, PawFnTrait,
+    PawRuntimeOptions, Qwen3_0_6B,
+};
 pub use crate::types::{
     BaseModelInfo, BundleMeta, CompilerInfo, LocalSdkInfo, Program, ProgramId, ProgramList,
     ProgramSummary, RuntimeManifest, Slug, VersionEntry, VersionList,

@@ -1,6 +1,8 @@
+pub mod backend;
 pub mod config;
 pub mod runtime;
 
+pub use backend::LlamaCppBackend;
 pub use config::{DevicePreference, PawLlamaCppConfig, PawLlamaCppConfigBuilder};
 pub use paw_core;
 pub use paw_core::{PawFnTrait, PawRuntimeOptions};

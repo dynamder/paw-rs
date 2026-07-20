@@ -32,7 +32,6 @@ pub mod function;
 pub mod prelude;
 
 pub use function::PawFnBuilder;
-#[cfg(feature = "candle")]
 pub use function::PawFn;
 
 #[cfg(test)]
@@ -93,20 +92,16 @@ mod tests {
             .spec("test");
     }
 
-    #[cfg(feature = "candle")]
     #[test]
-    fn test_paw_fn_from_inner_type() {
-        fn _take_from_inner(f: fn(paw_candle::PawFunction) -> PawFn<paw_candle::Qwen3_0_6B>) {
-            let _ = f;
-        }
-        _take_from_inner(PawFn::from_inner);
+    fn test_paw_fn_send_static() {
+        fn _assert_send<T: Send>() {}
+        _assert_send::<PawFn<paw_core::Qwen3_0_6B, paw_core::Candle>>();
     }
 
-    #[cfg(feature = "candle")]
     #[test]
-    fn test_paw_fn_send() {
+    fn test_paw_fn_send_llama() {
         fn _assert_send<T: Send>() {}
-        _assert_send::<PawFn<paw_candle::Qwen3_0_6B>>();
+        _assert_send::<PawFn<paw_core::Qwen3_0_6B, paw_core::LlamaCpp>>();
     }
 
     #[test]

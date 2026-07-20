@@ -117,7 +117,10 @@ pub use format::{
     ExamplePair, GenerationConfig, LoRAConfig, PawFileMeta, PawFormatReader, PawFormatWriter,
     TensorData,
 };
-pub use runtime::{PawFnTrait, PawRuntimeOptions};
+pub use runtime::{
+    Backend, Candle, Dynamic, DynamicBackend, Gpt2, InterpreterModel, LlamaCpp, PawFnTrait,
+    PawRuntimeOptions, Qwen3_0_6B,
+};
 pub use types::*;
 
 /// High-level convenience: compile a spec on the PAW server.
