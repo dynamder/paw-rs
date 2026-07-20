@@ -99,6 +99,20 @@
 //! # }
 //! ```
 //!
+//! ## Examples
+//!
+//! See [`paw-rs/examples/`](https://github.com/dynamder/paw-rs/tree/main/paw-rs/examples) for runnable examples:
+//!
+//! | File | Description |
+//! |------|-------------|
+//! | [`high_level.rs`](https://github.com/dynamder/paw-rs/tree/main/paw-rs/examples/high_level.rs) | Type-state builder: compile → infer in one call |
+//! | [`low_level.rs`](https://github.com/dynamder/paw-rs/tree/main/paw-rs/examples/low_level.rs) | Manual 6-step pipeline with PawClient + PawFnLoader |
+//!
+//! ```bash
+//! PAW_API_KEY=paw_sk_... cargo run --example high_level -p paw-rs
+//! PAW_API_KEY=paw_sk_... cargo run --example low_level -p paw-rs
+//! ```
+//!
 //! ## CLI
 //!
 //! The crate also ships the `paw-rs` binary — see [`README.md`] or run `paw-rs --help` for usage.

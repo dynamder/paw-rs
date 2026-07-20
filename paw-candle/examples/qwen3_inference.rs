@@ -8,9 +8,7 @@
 
 use hf_hub::HFClient;
 use paw_candle::prelude::*;
-use paw_core::prelude::*;
 
-const QWEN3_REPO: &str = "programasweights/Qwen3-0.6B-GGUF-Q6_K";
 const QWEN3_FILE: &str = "qwen3-0.6b-q6_k.gguf";
 const TOKENIZER_REPO: &str = "Qwen";
 const TOKENIZER_MODEL: &str = "Qwen3-0.6B";

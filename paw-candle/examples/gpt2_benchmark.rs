@@ -1,22 +1,5 @@
 use std::time::{Duration, Instant};
-use hf_hub::HFClient;
 use paw_candle::prelude::*;
-use paw_core::prelude::*;
-
-const GPT2_FILE: &str = "gpt2-q8_0.gguf";
-
-async fn ensure_cached<T: AsRef<std::path::Path>>(
-    hf: &HFClient, repo: &str, model: &str, file: &str, dst: T,
-) -> Result<()> {
-    let dst = dst.as_ref();
-    if dst.exists() { return Ok(()); }
-    let cached = hf.model(repo, model)
-        .download_file().filename(file).send().await
-        .map_err(|e| Error::Other(format!("hf-hub: {e}")))?;
-    if let Some(p) = dst.parent() { std::fs::create_dir_all(p)?; }
-    std::fs::copy(&cached, dst)?;
-    Ok(())
-}
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -32,9 +15,8 @@ async fn main() -> Result<()> {
     let _ = std::fs::remove_file(dir.join("prefix_kv_cache.bin"));
 
     println!("[2/3] Ensuring GPT-2 base model...");
-    let hf = HFClient::new().map_err(|e| Error::Other(format!("hf-hub init: {e}")))?;
-    let gguf_path = config.base_models_dir().join(GPT2_FILE);
-    ensure_cached(&hf, "programasweights", "GPT2-GGUF-Q8_0", GPT2_FILE, &gguf_path).await?;
+    let bundle = PawBundle::load_from_dir(&dir)?;
+    paw_candle::ensure_assets(&config, &dir, bundle.interpreter_model()).await?;
 
     println!("[3/3] Running inference...");
     let candle_config = PawCandleConfig::builder().core(config).build();

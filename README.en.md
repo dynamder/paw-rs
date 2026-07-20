@@ -290,15 +290,41 @@ cargo run --features cuda -- run --program email-triage --input "test"
 
 ---
 
+## Examples
+
+Example files are located in each crate's `examples/` directory:
+
+| Example | Crate | Description | API Key? |
+|---------|-------|-------------|----------|
+| [`high_level`](paw-rs/examples/high_level.rs) | `paw-rs` | High-level API: compile → infer (one-shot) | Yes |
+| [`low_level`](paw-rs/examples/low_level.rs) | `paw-rs` | Low-level API: 6-step manual pipeline | Yes |
+| [`qwen3_inference`](paw-candle/examples/qwen3_inference.rs) | `paw-candle` | Load existing program and infer | No |
+| [`gpt2_inference`](paw-candle/examples/gpt2_inference.rs) | `paw-candle` | Compile → download → infer (GPT-2) | Yes |
+| [`download_and_save`](paw-core/examples/download_and_save.rs) | `paw-core` | Download bundle + binary format roundtrip | No |
+| [`verify_bundle`](paw-candle/examples/verify_bundle.rs) | `paw-candle` | Load LoRA → forward pass verification | No |
+
+```bash
+# High-level API example (requires API key)
+PAW_API_KEY=paw_sk_... cargo run --example high_level -p paw-rs
+
+# Low-level API example
+PAW_API_KEY=paw_sk_... cargo run --example low_level -p paw-rs
+
+# Load existing program (no API key needed)
+cargo run --release --example qwen3_inference -p paw-candle
+```
+
+---
+
 ## Architecture
 
 | crate | Description |
 |---|---|
 | `paw-core` | HTTP client, cache management, bundle parsing, type definitions |
 | `paw-candle` | Candle inference engine, quantized model loading, LoRA adapters |
-| `paw-rs` | High-level API (`PawFn` / `PawFnBuilder`) + CLI binary |
+| `paw-rs` | High-level API (`PawFn` / `PawFnBuilder`) + CLI binary + examples |
 
-Low-level crates are accessible via `paw_rs::paw_core` and `paw_rs::paw_candle`.
+Low-level crates are accessible via `paw_rs::paw_core` and `paw_rs::paw_candle`. Full examples in `paw-rs/examples/`, `paw-candle/examples/`, `paw-core/examples/`.
 
 ---
 

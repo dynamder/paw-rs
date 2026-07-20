@@ -23,6 +23,18 @@
 //! # Ok(())
 //! # }
 //! ```
+//!
+//! ## Examples
+//!
+//! Runnable examples in [`paw-candle/examples/`](https://github.com/dynamder/paw-rs/tree/main/paw-candle/examples):
+//!
+//! | File | Description |
+//! |------|-------------|
+//! | [`qwen3_inference.rs`](https://github.com/dynamder/paw-rs/tree/main/paw-candle/examples/qwen3_inference.rs) | Load existing program and run inference |
+//! | [`gpt2_inference.rs`](https://github.com/dynamder/paw-rs/tree/main/paw-candle/examples/gpt2_inference.rs) | Compile, download, infer (requires API key) |
+//! | [`verify_bundle.rs`](https://github.com/dynamder/paw-rs/tree/main/paw-candle/examples/verify_bundle.rs) | Load LoRA, forward pass verification |
+//! | [`qwen3_benchmark.rs`](https://github.com/dynamder/paw-rs/tree/main/paw-candle/examples/qwen3_benchmark.rs) | End-to-end latency benchmark |
+//! | [`gpt2_benchmark.rs`](https://github.com/dynamder/paw-rs/tree/main/paw-candle/examples/gpt2_benchmark.rs) | GPT-2 latency benchmark |
 
 mod kv_cache;
 pub mod lora;

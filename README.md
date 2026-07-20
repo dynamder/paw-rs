@@ -288,15 +288,41 @@ cargo run --features cuda -- run --program email-triage --input "test"
 
 ---
 
+## Examples
+
+以下示例位于 `<crate>/examples/`，可直接运行：
+
+| 示例 | Crate | 说明 | 需 API key |
+|------|-------|------|-----------|
+| [`high_level`](paw-rs/examples/high_level.rs) | `paw-rs` | 高层 API：编译→推理（一键） | 是 |
+| [`low_level`](paw-rs/examples/low_level.rs) | `paw-rs` | 底层 API：6 步手动流程 | 是 |
+| [`qwen3_inference`](paw-candle/examples/qwen3_inference.rs) | `paw-candle` | 加载已有程序并推理 | 否 |
+| [`gpt2_inference`](paw-candle/examples/gpt2_inference.rs) | `paw-candle` | 编译→下载→推理（GPT-2） | 是 |
+| [`download_and_save`](paw-core/examples/download_and_save.rs) | `paw-core` | 下载 bundle + 二进制格式 roundtrip | 否 |
+| [`verify_bundle`](paw-candle/examples/verify_bundle.rs) | `paw-candle` | 加载 LoRA → forward pass 校验 | 否 |
+
+```bash
+# 高层 API 示例（需 API key）
+PAW_API_KEY=paw_sk_... cargo run --example high_level -p paw-rs
+
+# 底层 API 示例
+PAW_API_KEY=paw_sk_... cargo run --example low_level -p paw-rs
+
+# 加载已有程序（无需 API key）
+cargo run --release --example qwen3_inference -p paw-candle
+```
+
+---
+
 ## 架构
 
 | crate | 说明 |
 |---|---|
 | `paw-core` | HTTP 客户端、缓存管理、bundle 解析、类型定义 |
 | `paw-candle` | Candle 推理引擎、量化模型加载、LoRA 适配器 |
-| `paw-rs` | 高层 API (`PawFn` / `PawFnBuilder`) + CLI 工具 |
+| `paw-rs` | 高层 API (`PawFn` / `PawFnBuilder`) + CLI 工具 + examples |
 
-底层 crate 通过 `paw_rs::paw_core` 和 `paw_rs::paw_candle` 直接访问。
+底层 crate 通过 `paw_rs::paw_core` 和 `paw_rs::paw_candle` 直接访问。完整示例见 `paw-rs/examples/`、`paw-candle/examples/`、`paw-core/examples/`。
 
 ---
 

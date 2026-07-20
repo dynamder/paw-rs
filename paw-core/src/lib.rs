@@ -64,6 +64,15 @@
 //! | `PAW_VERBOSE` | Verbose logging | `false` |
 //! | `PAW_OFFLINE` | Offline-only | `false` |
 //!
+//! ## Examples
+//!
+//! Runnable examples in [`paw-core/examples/`](https://github.com/dynamder/paw-rs/tree/main/paw-core/examples):
+//!
+//! | File | Description |
+//! |------|-------------|
+//! | [`download_and_save.rs`](https://github.com/dynamder/paw-rs/tree/main/paw-core/examples/download_and_save.rs) | Download bundle, read format, binary roundtrip |
+//! | [`clear_cache.rs`](https://github.com/dynamder/paw-rs/tree/main/paw-core/examples/clear_cache.rs) | Inspect and clear local cache |
+//!
 //! ## High-level convenience functions
 //!
 //! ```rust,no_run

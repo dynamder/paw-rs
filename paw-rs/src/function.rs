@@ -298,7 +298,8 @@ async fn download_assets(config: &PawConfig, program_dir: &std::path::Path) -> R
             .send()
             .await
             .map_err(|e| Error::Other(format!("download GGUF: {e}")))?;
-        std::fs::rename(&tmp, &gguf_path).map_err(Error::Io)?;
+        std::fs::copy(&tmp, &gguf_path).map_err(Error::Io)?;
+        std::fs::remove_file(&tmp).ok();
     }
 
     let tokenizer_path = program_dir.join("tokenizer.json");
@@ -310,7 +311,8 @@ async fn download_assets(config: &PawConfig, program_dir: &std::path::Path) -> R
             .send()
             .await
             .map_err(|e| Error::Other(format!("download tokenizer: {e}")))?;
-        std::fs::rename(&tmp, &tokenizer_path).map_err(Error::Io)?;
+        std::fs::copy(&tmp, &tokenizer_path).map_err(Error::Io)?;
+        std::fs::remove_file(&tmp).ok();
     }
 
     Ok(())
