@@ -4505,7 +4505,7 @@ checksum = "df94ce210e5bc13cb6651479fa48d14f601d9858cfe0467f43ae157023b938d3"
 
 [[package]]
 name = "paw-candle"
-version = "0.1.2"
+version = "0.2.0"
 dependencies = [
  "ahash",
  "candle-core 0.11.0",
@@ -4526,7 +4526,7 @@ dependencies = [
 
 [[package]]
 name = "paw-core"
-version = "0.1.2"
+version = "0.2.0"
 dependencies = [
  "candle-core 0.11.0",
  "dirs",
@@ -4543,7 +4543,7 @@ dependencies = [
 
 [[package]]
 name = "paw-llamacpp"
-version = "0.1.2"
+version = "0.2.0"
 dependencies = [
  "encoding_rs",
  "llama-cpp-2",
@@ -4555,7 +4555,7 @@ dependencies = [
 
 [[package]]
 name = "paw-mistralrs"
-version = "0.1.2"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "candle-core 0.11.0",
@@ -4573,7 +4573,7 @@ dependencies = [
 
 [[package]]
 name = "paw-rs"
-version = "0.1.2"
+version = "0.2.0"
 dependencies = [
  "clap",
  "hf-hub 1.0.0",
