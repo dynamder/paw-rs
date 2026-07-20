@@ -4425,13 +4425,8 @@ dependencies = [
 name = "paw-llamacpp"
 version = "0.1.2"
 dependencies = [
- "anyhow",
- "encoding_rs",
  "llama-cpp-2",
  "paw-core",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
  "tokenizers 0.23.1",
  "tokio",
  "tracing",

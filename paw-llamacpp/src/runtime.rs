@@ -1,4 +1,3 @@
-use std::cell::RefCell;
 use std::num::NonZeroU32;
 use std::path::PathBuf;
 
@@ -7,13 +6,14 @@ use llama_cpp_2::context::LlamaContext;
 use llama_cpp_2::llama_backend::LlamaBackend;
 use llama_cpp_2::llama_batch::LlamaBatch;
 use llama_cpp_2::model::params::LlamaModelParams;
-use llama_cpp_2::model::{AddBos, LlamaLoraAdapter, LlamaModel};
+use llama_cpp_2::model::{LlamaLoraAdapter, LlamaModel};
 use llama_cpp_2::sampling::LlamaSampler;
 use llama_cpp_2::token::LlamaToken;
 use paw_core::{Error, PawBundle};
 use tracing::info;
 
 use crate::config::PawLlamaCppConfig;
+use crate::tokenizer::Tokenizer;
 
 #[derive(Debug, Clone)]
 pub struct PawRuntimeOptions {
@@ -32,48 +32,41 @@ impl Default for PawRuntimeOptions {
     }
 }
 
+#[allow(dead_code)]
 struct ModelBundle {
     model: LlamaModel,
     backend: LlamaBackend,
 }
 
+#[allow(dead_code)]
 pub struct PawFunction {
     bundle: ModelBundle,
-    adapter: RefCell<Option<LlamaLoraAdapter>>,
-    ctx: RefCell<Option<LlamaContext<'static>>>,
-
+    adapter: Option<LlamaLoraAdapter>,
+    ctx: Option<LlamaContext<'static>>,
+    tokenizer: Tokenizer,
     n_ctx: usize,
     seed: u32,
     prefix_text: String,
     suffix_text: String,
-    prefix_tokens: Vec<LlamaToken>,
-    prefix_evaluated: RefCell<bool>,
+    prefix_tokens: Vec<u32>,
+    prefix_evaluated: bool,
+    eos_token_id: u32,
 }
 
 impl Drop for PawFunction {
     fn drop(&mut self) {
-        if let (Some(ctx), Some(adapter)) = (
-            self.ctx.borrow_mut().as_mut(),
-            self.adapter.borrow_mut().as_mut(),
-        ) {
+        if let (Some(ctx), Some(adapter)) = (self.ctx.as_mut(), self.adapter.as_mut()) {
             let _ = ctx.lora_adapter_remove(adapter);
         }
-        self.ctx.borrow_mut().take();
+        self.ctx.take();
     }
 }
 
-unsafe impl Send for PawFunction {}
-unsafe impl Sync for PawFunction {}
-
 impl PawFunction {
-    pub fn run(&self, input: &str, opts: &PawRuntimeOptions) -> Result<String, Error> {
+    pub fn run(&mut self, input: &str, opts: &PawRuntimeOptions) -> Result<String, Error> {
         let full_prompt = format!("{}{}{}", self.prefix_text, input, self.suffix_text);
 
-        let all_tokens = self
-            .bundle
-            .model
-            .str_to_token(&full_prompt, AddBos::Never)
-            .map_err(|e| Error::Other(format!("tokenize: {e}")))?;
+        let all_tokens = self.tokenizer.encode(&full_prompt)?;
 
         if all_tokens.len() >= self.n_ctx {
             return Err(Error::Other(format!(
@@ -88,28 +81,30 @@ impl PawFunction {
             .map(|m| m.min(self.n_ctx - all_tokens.len()))
             .unwrap_or(self.n_ctx - all_tokens.len());
 
-        let mut guard = self.ctx.borrow_mut();
-        let ctx = guard.as_mut().unwrap();
+        let ctx = self.ctx.as_mut().unwrap();
         let n_prefix = self.prefix_tokens.len();
 
-        if !*self.prefix_evaluated.borrow() {
+        if !self.prefix_evaluated {
             if n_prefix > 0 {
                 let mut batch = LlamaBatch::new(n_prefix.max(1), 1);
                 for (i, &t) in self.prefix_tokens.iter().enumerate() {
                     batch
-                        .add(t, i as i32, &[0], false)
+                        .add(LlamaToken::new(t as i32), i as i32, &[0], false)
                         .map_err(|e| Error::Other(format!("prefix add: {e}")))?;
                 }
                 ctx.decode(&mut batch)
                     .map_err(|e| Error::Other(format!("prefix eval: {e}")))?;
             }
-            *self.prefix_evaluated.borrow_mut() = true;
+            self.prefix_evaluated = true;
             info!("Prefix evaluated and cached ({} tokens)", n_prefix);
         }
 
         let _ = ctx.clear_kv_cache_seq(Some(0), Some(n_prefix as u32), None);
 
-        let input_tokens: Vec<LlamaToken> = all_tokens[n_prefix..].to_vec();
+        let input_tokens: Vec<LlamaToken> = all_tokens[n_prefix..]
+            .iter()
+            .map(|&id| LlamaToken::new(id as i32))
+            .collect();
         if !input_tokens.is_empty() {
             let mut batch = LlamaBatch::new(input_tokens.len().max(1), 1);
             let last = input_tokens.len() as i32 - 1;
@@ -125,8 +120,7 @@ impl PawFunction {
         }
 
         let mut pos = all_tokens.len() as i32;
-        let mut decoder = encoding_rs::UTF_8.new_decoder();
-        let mut output = String::new();
+        let mut gen_ids: Vec<u32> = Vec::new();
 
         for _ in 0..gen_limit {
             if pos >= self.n_ctx as i32 {
@@ -146,17 +140,11 @@ impl PawFunction {
                 None => break,
             };
 
-            if self.bundle.model.is_eog_token(token) {
+            if token.0 as u32 == self.eos_token_id {
                 break;
             }
 
-            if let Ok(piece) = self
-                .bundle
-                .model
-                .token_to_piece(token, &mut decoder, false, None)
-            {
-                output.push_str(&piece);
-            }
+            gen_ids.push(token.0 as u32);
 
             let mut single = LlamaBatch::new(1, 1);
             single
@@ -167,6 +155,7 @@ impl PawFunction {
             pos += 1;
         }
 
+        let output = self.tokenizer.decode(&gen_ids)?;
         Ok(output.trim().to_string())
     }
 }
@@ -254,12 +243,13 @@ impl PawFnLoader {
         model: LlamaModel,
         mut adapter: Option<LlamaLoraAdapter>,
     ) -> Result<PawFunction, Error> {
+        let tokenizer = Tokenizer::new(&bundle)?;
+        let eos_token_id = tokenizer.eos_token_id();
+
         let n_ctx = self.config.core.n_ctx() as usize;
         let (prefix_text, suffix_text) = bundle.split_template();
 
-        let prefix_tokens = model
-            .str_to_token(&prefix_text, AddBos::Never)
-            .map_err(|e| Error::Other(format!("tokenize prefix: {e}")))?;
+        let prefix_tokens = tokenizer.encode(&prefix_text)?;
 
         let mut cp = LlamaContextParams::default().with_n_ctx(Some(
             NonZeroU32::new(n_ctx as u32).unwrap_or(NonZeroU32::new(2048).unwrap()),
@@ -295,14 +285,16 @@ impl PawFnLoader {
         );
         Ok(PawFunction {
             bundle: ModelBundle { model, backend },
-            adapter: RefCell::new(adapter),
-            ctx: RefCell::new(Some(ctx)),
+            adapter,
+            ctx: Some(ctx),
+            tokenizer,
             n_ctx,
             seed: self.config.seed,
             prefix_text,
             suffix_text,
             prefix_tokens,
-            prefix_evaluated: RefCell::new(false),
+            prefix_evaluated: false,
+            eos_token_id,
         })
     }
 }
