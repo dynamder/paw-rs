@@ -1,0 +1,50 @@
+paw-rs/src/function.rs
+  s_49ae7ceabb4fd4::t_49adda7bdb3146 301-302,314-315
+paw-candle/examples/gpt2_benchmark.rs
+  s_49ae7ceabb4fd4::t_02c5e8cf612cde 18-19
+paw-rs/examples/high_level.rs
+  s_49ae7ceabb4fd4::t_cdc90a6d7a23e6 1-11,13-31
+  s_49ae7ceabb4fd4::t_6cd00fc55b76ee 12
+README.en.md
+  s_49ae7ceabb4fd4::t_06036dad50b8b7 293-318,325,327
+paw-candle/examples/gpt2_inference.rs
+  s_49ae7ceabb4fd4::t_562f04b66f5aab 14
+  s_49ae7ceabb4fd4::t_34d349c1cdda9a 59
+paw-rs/src/lib.rs
+  s_49ae7ceabb4fd4::t_59b76566b5941c 102-115
+paw-core/src/lib.rs
+  s_49ae7ceabb4fd4::t_4abfdad661a7cc 67-75
+paw-candle/src/lib.rs
+  s_49ae7ceabb4fd4::t_ee38ca453d2f5a 26-37
+paw-candle/examples/verify_bundle.rs
+  s_49ae7ceabb4fd4::t_afbdddd9362a89 4-5,11,13,48,51-54,77-78,80-81,83-86,98-102
+  s_49ae7ceabb4fd4::t_c9f6eae5ab8817 49
+  s_49ae7ceabb4fd4::t_e2e3b24ab9fd27 47,55-73
+  s_49ae7ceabb4fd4::t_6563a3a405a806 50
+  s_49ae7ceabb4fd4::t_bedad98dd2a3c6 79,82
+paw-core/examples/download_and_save.rs
+  s_49ae7ceabb4fd4::t_757700221de6a8 1-5,10-11,13-26,49-51,57-91
+  s_49ae7ceabb4fd4::t_ce2136cec51910 52-56
+paw-candle/examples/qwen3_benchmark.rs
+  s_49ae7ceabb4fd4::t_124673004837fa 68,70-73,83-87
+paw-rs/examples/low_level.rs
+  s_49ae7ceabb4fd4::t_6571bb9e3411da 1-86
+README.md
+  s_49ae7ceabb4fd4::t_1339a2e82c739c 291-316,323,325
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "8ce56e6af0f613ea6b668c66be6193e9e3b0acea",
+  "prompts": {},
+  "sessions": {
+    "s_49ae7ceabb4fd4": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_082221e4bffeWZAa8KbyXkAEhd",
+        "model": "unknown"
+      },
+      "human_author": "dynamder <igaster@163.com>"
+    }
+  }
+}
