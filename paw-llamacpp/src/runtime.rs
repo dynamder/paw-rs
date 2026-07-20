@@ -40,31 +40,30 @@ impl Default for PawRuntimeOptions {
     }
 }
 
+#[allow(dead_code)]
 struct ModelBundle {
     model: LlamaModel,
     backend: LlamaBackend,
 }
 
+#[allow(dead_code)]
 pub struct PawFunction {
     bundle: ModelBundle,
-    adapter: RefCell<Option<LlamaLoraAdapter>>,
+    adapter: Option<LlamaLoraAdapter>,
     ctx: RefCell<Option<LlamaContext<'static>>>,
-
     n_ctx: usize,
     seed: u32,
     prefix_text: String,
     suffix_text: String,
-    prefix_tokens: Vec<LlamaToken>,
+    n_prefix: usize,
     prefix_evaluated: RefCell<bool>,
     eos_token_id: u32,
 }
 
 impl Drop for PawFunction {
     fn drop(&mut self) {
-        if let (Some(ctx), Some(adapter)) = (
-            self.ctx.borrow_mut().as_mut(),
-            self.adapter.borrow_mut().as_mut(),
-        ) {
+        if let (Some(ctx), Some(adapter)) = (self.ctx.borrow_mut().as_mut(), self.adapter.as_mut())
+        {
             let _ = ctx.lora_adapter_remove(adapter);
         }
         self.ctx.borrow_mut().take();
@@ -77,7 +76,6 @@ unsafe impl Sync for PawFunction {}
 impl PawFunction {
     pub fn run(&self, input: &str, opts: &PawRuntimeOptions) -> Result<String, Error> {
         let full_prompt = format!("{}{}{}", self.prefix_text, input, self.suffix_text);
-
         let all_tokens = self
             .bundle
             .model
@@ -97,14 +95,15 @@ impl PawFunction {
             .map(|m| m.min(self.n_ctx - all_tokens.len()))
             .unwrap_or(self.n_ctx - all_tokens.len());
 
+        let n_prefix = self.n_prefix;
         let mut guard = self.ctx.borrow_mut();
         let ctx = guard.as_mut().unwrap();
-        let n_prefix = self.prefix_tokens.len();
 
         if !*self.prefix_evaluated.borrow() {
             if n_prefix > 0 {
+                let prefix_llama: Vec<LlamaToken> = all_tokens[..n_prefix].to_vec();
                 let mut batch = LlamaBatch::new(n_prefix.max(1), 1);
-                for (i, &t) in self.prefix_tokens.iter().enumerate() {
+                for (i, &t) in prefix_llama.iter().enumerate() {
                     batch
                         .add(t, i as i32, &[0], false)
                         .map_err(|e| Error::Other(format!("prefix add: {e}")))?;
@@ -124,9 +123,8 @@ impl PawFunction {
             let last = input_tokens.len() as i32 - 1;
             for (i, &t) in input_tokens.iter().enumerate() {
                 let pos = n_prefix as i32 + i as i32;
-                let is_last = i as i32 == last;
                 batch
-                    .add(t, pos, &[0], is_last)
+                    .add(t, pos, &[0], i as i32 == last)
                     .map_err(|e| Error::Other(format!("input add: {e}")))?;
             }
             ctx.decode(&mut batch)
@@ -264,29 +262,28 @@ impl PawFnLoader {
         adapter: Option<LlamaLoraAdapter>,
     ) -> Result<PawFunction, Error> {
         let n_ctx = self.config.core.n_ctx() as usize;
+        let eos_token_id = eos_from_gguf(&model);
         let (prefix_text, suffix_text) = bundle.split_template();
 
         let prefix_tokens = model
             .str_to_token(&prefix_text, AddBos::Never)
             .map_err(|e| Error::Other(format!("tokenize prefix: {e}")))?;
+        let n_prefix = prefix_tokens.len();
 
-        let eos_token_id = eos_from_gguf(&model);
-
-        // Build the PawFunction FIRST so model/backend are in their final position
         let mut pf = PawFunction {
             bundle: ModelBundle { model, backend },
-            adapter: RefCell::new(adapter),
+            adapter,
             ctx: RefCell::new(None),
             n_ctx,
             seed: self.config.seed,
             prefix_text,
             suffix_text,
-            prefix_tokens,
+            n_prefix,
             prefix_evaluated: RefCell::new(false),
             eos_token_id,
         };
 
-        // NOW create the context from the model already inside PawFunction
+        // Now create context from model already in PawFunction
         let mut cp = LlamaContextParams::default().with_n_ctx(Some(
             NonZeroU32::new(n_ctx as u32).unwrap_or(NonZeroU32::new(2048).unwrap()),
         ));
@@ -303,7 +300,7 @@ impl PawFnLoader {
             .new_context(&pf.bundle.backend, cp)
             .map_err(|e| Error::Other(format!("new_context: {e}")))?;
 
-        if let Some(ref mut a) = *pf.adapter.borrow_mut() {
+        if let Some(ref mut a) = pf.adapter {
             ctx.lora_adapter_set(a, 1.0)
                 .map_err(|e| Error::Other(format!("lora set: {e}")))?;
             info!("LoRA applied");
@@ -315,9 +312,9 @@ impl PawFnLoader {
         info!(
             "Program loaded: model={}, prefix={} tokens, eos={}{}",
             bundle.interpreter_model(),
-            pf.prefix_tokens.len(),
+            n_prefix,
             eos_token_id,
-            if pf.adapter.borrow().is_some() {
+            if pf.adapter.is_some() {
                 " (with LoRA)"
             } else {
                 ""
