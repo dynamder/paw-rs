@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use candle_core::{Device, Tensor};
 use candle_nn::ops::softmax;
@@ -365,8 +365,19 @@ impl PawFnLoader {
             tracing::info!("LoRA applied: {matched} weight matrices matched (side-path, weights stay quantized)");
         }
         let (prefix_text, suffix_text) = bundle.split_template();
-        let prefix_tokens = tokenizer.encode(&prefix_text)?;
-        let n_prefix = prefix_tokens.len();
+
+        // Encode prefix + "x" + suffix to get the actual prefix token count.
+        // This is critical: ByteLevel tokenizer (add_prefix_space=true) adds
+        // a leading space when encoding standalone text but NOT when it's
+        // embedded in a larger string.  encoding prefix + x + suffix and then
+        // subtracting the encoding of "x" gives the correct in-context length.
+        let placeholder = "x";
+        let full_test = format!("{prefix_text}{placeholder}{suffix_text}");
+        let full_test_tokens = tokenizer.encode(&full_test)?;
+        let placeholder_tokens = tokenizer.encode(placeholder)?;
+        let n_prefix = full_test_tokens
+            .len()
+            .saturating_sub(placeholder_tokens.len());
         let n_ctx = self.config.core.n_ctx() as usize;
 
         let mut kv_cache = PrefixKvCache::new(
@@ -408,6 +419,85 @@ impl PawFnLoader {
             eos_token_id,
         ))
     }
+}
+
+// ── Unified asset downloader ──────────────────────────────────────────
+
+/// Ensure the base model GGUF and tokenizer are cached locally.
+///
+/// Downloads from HuggingFace if not already present.  Both the CLI and
+/// benchmark examples should call this function with the same arguments so
+/// they always use identical assets.
+///
+/// # Arguments
+/// * `config`     — user config (for `base_models_dir`)
+/// * `program_dir` — downloaded program bundle directory
+/// * `interpreter` — model identifier, e.g. `"Qwen/Qwen3-0.6B"`
+/// Download the GGUF base model and tokenizer for the given interpreter.
+///
+/// This is the single unified path that both the CLI and benchmark
+/// examples use — any consumer of paw-candle should call this before
+/// [`PawFnLoader::load`].
+pub async fn ensure_assets(
+    config: &paw_core::PawConfig,
+    program_dir: &Path,
+    interpreter: &str,
+) -> Result<(), paw_core::Error> {
+    use paw_core::cache::known_models;
+
+    let hf = hf_hub::HFClient::new()
+        .map_err(|e| paw_core::Error::Other(format!("hf-hub init: {e}")))?;
+
+    let (repo, file, tok_owner, tok_model) = match interpreter {
+        "Qwen/Qwen3-0.6B" | "qwen3-0.6b-q6_k" => (
+            known_models::QWEN3_0_6B_GGUF_REPO,
+            known_models::QWEN3_0_6B_GGUF_FILE,
+            "Qwen",
+            "Qwen3-0.6B",
+        ),
+        "gpt2" | "gpt2-q8_0" => (
+            known_models::GPT2_GGUF_REPO,
+            known_models::GPT2_GGUF_FILE,
+            "openai-community",
+            "gpt2",
+        ),
+        other => return Err(paw_core::Error::UnsupportedModel(other.to_string())),
+    };
+
+    // GGUF
+    let gguf_path = config.base_models_dir().join(file);
+    if !gguf_path.exists() {
+        info!("downloading GGUF {repo}/{file}...");
+        let cached = hf
+            .model(repo, "")
+            .download_file()
+            .filename(file)
+            .send()
+            .await
+            .map_err(|e| paw_core::Error::Other(format!("hf-hub GGUF: {e}")))?;
+        if let Some(p) = gguf_path.parent() {
+            std::fs::create_dir_all(p).map_err(paw_core::Error::Io)?;
+        }
+        std::fs::copy(&cached, &gguf_path).map_err(paw_core::Error::Io)?;
+        info!("GGUF cached to {}", gguf_path.display());
+    }
+
+    // Tokenizer
+    let tok_path = program_dir.join("tokenizer.json");
+    if !tok_path.exists() {
+        info!("downloading tokenizer {tok_owner}/{tok_model}/tokenizer.json...");
+        let cached = hf
+            .model(tok_owner, tok_model)
+            .download_file()
+            .filename("tokenizer.json")
+            .send()
+            .await
+            .map_err(|e| paw_core::Error::Other(format!("hf-hub tokenizer: {e}")))?;
+        std::fs::copy(&cached, &tok_path).map_err(paw_core::Error::Io)?;
+        info!("tokenizer cached to {}", tok_path.display());
+    }
+
+    Ok(())
 }
 
 // ── Private helpers ─────────────────────────────────────────────────

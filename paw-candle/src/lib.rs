@@ -35,7 +35,7 @@ pub mod runtime;
 pub use config::PawCandleConfigBuilder;
 pub use config::{DevicePreference, PawCandleConfig};
 pub use paw_core;
-pub use runtime::{PawFnLoader, PawFunction, PawRuntimeOptions};
+pub use runtime::{ensure_assets, PawFnLoader, PawFunction, PawRuntimeOptions};
 
 pub use lora::{GgufLoraAdapter, LoraLayer};
 

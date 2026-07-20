@@ -8,30 +8,8 @@
 
 use std::time::{Duration, Instant};
 
-use hf_hub::HFClient;
 use paw_candle::prelude::*;
 use paw_core::prelude::*;
-
-const QWEN3_REPO: &str = "programasweights/Qwen3-0.6B-GGUF-Q6_K";
-const QWEN3_FILE: &str = "qwen3-0.6b-q6_k.gguf";
-const TOKENIZER_REPO: &str = "Qwen";
-const TOKENIZER_MODEL: &str = "Qwen3-0.6B";
-const TOKENIZER_FILE: &str = "tokenizer.json";
-
-async fn ensure_cached<T: AsRef<std::path::Path>>(
-    hf: &HFClient, repo: &str, model: &str, file: &str, dst: T,
-) -> Result<()> {
-    let dst = dst.as_ref();
-    if dst.exists() { return Ok(()); }
-    println!("  downloading {repo}/{model}/{file}...");
-    let cached = hf.model(repo, model)
-        .download_file().filename(file).send().await
-        .map_err(|e| Error::Other(format!("hf-hub: {e}")))?;
-    if let Some(p) = dst.parent() { std::fs::create_dir_all(p)?; }
-    std::fs::copy(&cached, dst)?;
-    println!("  cached to {}", dst.display());
-    Ok(())
-}
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -57,19 +35,12 @@ async fn main() -> Result<()> {
         println!("  removed old prefix KV cache");
     }
 
-    // ── 2. Download Qwen3 base model ────────────────────────────────────
-    println!("[2/4] Ensuring Qwen3 base model...");
-    let hf = HFClient::new().map_err(|e| Error::Other(format!("hf-hub init: {e}")))?;
-    let gguf_path = config.base_models_dir().join(QWEN3_FILE);
-    ensure_cached(&hf, "programasweights", "Qwen3-0.6B-GGUF-Q6_K", QWEN3_FILE, &gguf_path).await?;
+    // ── 2. Ensure base model + tokenizer ────────────────────────────────
+    println!("[2/4] Ensuring Qwen3 base model & tokenizer...");
+    paw_candle::ensure_assets(&config, &dir, "Qwen/Qwen3-0.6B").await?;
 
-    // ── 3. Download tokenizer ──────────────────────────────────────────
-    println!("[3/4] Ensuring tokenizer...");
-    let tok_path = dir.join(TOKENIZER_FILE);
-    ensure_cached(&hf, TOKENIZER_REPO, TOKENIZER_MODEL, TOKENIZER_FILE, &tok_path).await?;
-
-    // ── 4. Load model ──────────────────────────────────────────────────
-    println!("[4/4] Loading model...");
+    // ── 3. Load model ──────────────────────────────────────────────────
+    println!("[3/4] Loading model...");
     let load_start = Instant::now();
     let candle_config = PawCandleConfig::builder().core(config).build();
     let mut func = PawFnLoader::new(dir)

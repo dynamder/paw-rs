@@ -1,20 +1,34 @@
-# PAW RS — Unofficial ProgramAsWeights Rust SDK
+# PAW RS — ProgramAsWeights Rust SDK
 
 Unofficial Rust SDK for embedding ProgramAsWeights inference in Rust projects.
 
-**⚠️ Note**: This SDK is not officially maintained by ProgramAsWeights.
-CPU inference is approximately 4-5x slower than the official Python SDK (llama.cpp backend).
-GPU acceleration via CUDA/Metal is supported and can reduce the gap.
-
 > [中文版本](./README.md)
 
-## Quick Start
+**⚠️ Note**: This SDK is not officially maintained by ProgramAsWeights.
+CPU inference is approximately 4–5x slower than the official Python SDK (llama.cpp backend).
+GPU acceleration via `--features cuda` can reduce the gap significantly.
+
+---
+
+## Installation
+
+```toml
+[dependencies]
+paw-rs = "0.1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+```
+
+---
+
+## SDK Quick Start
+
+### Run an existing program
 
 ```rust
 use paw_rs::prelude::*;
 
 #[tokio::main]
-async fn main() -> Result<(), paw_core::Error> {
+async fn main() -> std::result::Result<(), paw_core::Error> {
     let mut f = PawFn::builder()
         .slug("email-triage")
         .load()
@@ -25,19 +39,246 @@ async fn main() -> Result<(), paw_core::Error> {
 }
 ```
 
-## Installation
+### Compile and run a new program
 
-```toml
-[dependencies]
-paw-rs = "0.1"
-tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+```rust
+use paw_rs::prelude::*;
+
+#[tokio::main]
+async fn main() -> std::result::Result<(), paw_core::Error> {
+    let mut f = PawFn::builder()
+        .spec("Classify sentiment: return POSITIVE or NEGATIVE")
+        .compile()
+        .await?;
+    let result = f.run("I love this product!")?;
+    println!("{result}"); // "POSITIVE"
+    Ok(())
+}
 ```
 
-## Use Cases
+### Custom runtime options
 
-- Embed PAW neural inference in pure Rust projects
-- No Python runtime required
-- Suitable for HTTP services, CLI tools, and other Rust-native environments
+```rust
+use paw_rs::prelude::*;
+use paw_rs::paw_candle::PawRuntimeOptions;
+
+#[tokio::main]
+async fn main() -> std::result::Result<(), paw_core::Error> {
+    let mut f = PawFn::builder()
+        .slug("email-triage")
+        .load()
+        .await?;
+
+    let opts = PawRuntimeOptions {
+        max_tokens: Some(100),
+        temperature: 0.7,
+        ..Default::default()
+    };
+    let result = f.run_with("What should I do about this?", &opts)?;
+    println!("{result}");
+    Ok(())
+}
+```
+
+### Custom configuration
+
+```rust
+use paw_rs::prelude::*;
+use paw_rs::paw_core::PawConfig;
+use paw_rs::paw_candle::DevicePreference;
+
+#[tokio::main]
+async fn main() -> std::result::Result<(), paw_core::Error> {
+    let config = PawConfig::builder()
+        .api_url("https://custom.example.com")
+        .api_key("paw_sk_xxx")
+        .n_ctx(4096)
+        .verbose(true)
+        .build()?;
+
+    let mut f = PawFn::builder()
+        .config(config)
+        .device(DevicePreference::Cpu)
+        .slug("email-triage")
+        .load()
+        .await?;
+
+    let result = f.run("Is this urgent?")?;
+    println!("{result}");
+    Ok(())
+}
+```
+
+### Low-level API: manual loading
+
+```rust
+use paw_rs::paw_core::{PawClient, PawConfig};
+use paw_rs::paw_candle::{PawFnLoader, PawCandleConfig, PawRuntimeOptions};
+
+#[tokio::main]
+async fn main() -> std::result::Result<(), paw_core::Error> {
+    let config = PawConfig::from_env();
+    let client = PawClient::new(&config);
+
+    // Download the .paw program bundle
+    let dir = client.download_paw("some-program-id").await?;
+
+    // Load the model locally
+    let mut func = PawFnLoader::new(dir)
+        .config(PawCandleConfig::default())
+        .load()?;
+
+    let result = func.run("hello", &PawRuntimeOptions::default())?;
+    println!("{result}");
+    Ok(())
+}
+```
+
+---
+
+## CLI
+
+The `paw-rs` binary provides a Python-SDK-compatible CLI:
+
+### Authentication
+
+```bash
+# Interactive login (opens browser + paste key)
+paw-rs login
+
+# Provide API key directly
+paw-rs login paw_sk_your_api_key
+
+# Global --api-key works for all commands
+paw-rs --api-key paw_sk_xxx run --program email-triage --input "test"
+```
+
+### Compile
+
+```bash
+# Minimal compile
+paw-rs compile --spec "Classify message urgency as low, medium, or high"
+
+# With compiler, slug, and private flag
+paw-rs compile \
+  --spec "Extract key points from text" \
+  --compiler paw-4b-qwen3-0.6b \
+  --slug my-extractor \
+  --private
+
+# JSON output (for scripts / agent integration)
+paw-rs --json compile --spec "Classify sentiment"
+```
+
+### Run
+
+```bash
+# Run by slug
+paw-rs run --program email-triage --input "The server is on fire!"
+
+# Run by program ID
+paw-rs run --program a1b2c3d4e5f6a1b2 --input "hello"
+
+# With custom parameters
+paw-rs run \
+  --program email-triage \
+  --input "What's the deadline?" \
+  --max-tokens 256 \
+  --temperature 0.5 \
+  --verbose
+
+# JSON output
+paw-rs --json run --program email-triage --input "test"
+# → {"program":"email-triage","input":"test","output":"immediate"}
+```
+
+### Rename
+
+```bash
+# Set or change a slug (positional args)
+paw-rs rename a1b2c3d4e5f6a1b2 my-slug
+
+# Remove slug (pass empty string)
+paw-rs rename a1b2c3d4e5f6a1b2 ""
+
+# JSON output
+paw-rs rename a1b2c3d4e5f6a1b2 my-slug --json
+```
+
+### Info
+
+```bash
+# Query program metadata (positional arg)
+paw-rs info email-triage
+
+# By program ID
+paw-rs info a1b2c3d4e5f6a1b2
+
+# JSON output
+paw-rs info email-triage --json
+```
+
+### Global flags
+
+```bash
+# Custom server URL
+paw-rs --api-url https://api.custom.com compile --spec "..."
+
+# Global API key (for authenticated endpoints)
+paw-rs --api-key paw_sk_xxx info my-program
+
+# JSON mode (works with all subcommands)
+paw-rs --json compile --spec "Classify urgency"
+paw-rs --json run --program email-triage --input "test"
+paw-rs --json info my-program
+```
+
+### Agent / scripting workflow
+
+```bash
+# Compile → get ID → run
+PROGRAM_ID=$(paw-rs --json compile --spec "Classify urgency" | jq -r '.program_id')
+paw-rs run --program "$PROGRAM_ID" --input "Please review by EOD" --json | jq -r '.output'
+```
+
+---
+
+## Environment Variables
+
+| Variable | Description | Default |
+|---|---|---|
+| `PAW_API_URL` | PAW server URL | `https://programasweights.com` |
+| `PAW_API_KEY` | API key | (none) |
+| `PAW_CACHE_DIR` | Cache directory | `~/.cache/programasweights/` |
+| `PAW_CONFIG_DIR` | Config directory | `~/.config/programasweights/` |
+| `PAW_N_CTX` | Context window size | `2048` |
+| `PAW_GPU_LAYERS` | GPU layers (`-1`=all, `0`=CPU) | `-1` |
+| `PAW_VERBOSE` | Verbose logging (`1`/`true`) | `false` |
+| `PAW_OFFLINE` | Offline mode | `false` |
+
+---
+
+## Supported Models
+
+| Model | ID | GGUF Size |
+|---|---|---|
+| Qwen3-0.6B | `Qwen/Qwen3-0.6B` | 594 MB |
+| GPT-2 (124M) | `gpt2` | 134 MB |
+
+---
+
+## Feature Flags
+
+| flag | Description |
+|---|---|
+| `cuda` | NVIDIA GPU acceleration (`--features cuda`) |
+| `metal` | Apple Silicon GPU acceleration |
+
+```bash
+cargo run --features cuda -- run --program email-triage --input "test"
+```
+
+---
 
 ## Performance
 
@@ -47,47 +288,19 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 | GPT-2 (10 tokens) | — | ~140ms |
 | Model memory | ~600MB | ~600MB |
 
-GPU acceleration via `--features cuda` or `--features metal` can significantly reduce the gap.
-
-## CLI
-
-```bash
-# Run an existing program
-paw-rs run --program email-triage --input "Is this urgent?"
-
-# Compile a new program
-paw-rs compile --spec "Classify sentiment as positive or negative"
-
-# Query program info
-paw-rs info email-triage
-
-# Global options
-paw-rs --api-url https://api.programasweights.com --api-key paw_sk_xxx run --program ...
-```
-
-## Supported Models
-
-| Model | ID | GGUF Size |
-|---|---|---|
-| Qwen3-0.6B | `Qwen/Qwen3-0.6B` | 594 MB |
-| GPT-2 (124M) | `gpt2` | 134 MB |
-
-## Feature Flags
-
-| flag | Description |
-|---|---|
-| `cuda` | NVIDIA GPU acceleration (`--features cuda`) |
-| `metal` | Apple Silicon GPU acceleration |
+---
 
 ## Architecture
 
 | crate | Description |
 |---|---|
-| `paw-core` | HTTP client, cache, bundle parsing |
-| `paw-candle` | Candle inference engine, model loading, LoRA |
-| `paw-rs` | High-level API (`PawFn` / `PawFnBuilder`) + CLI |
+| `paw-core` | HTTP client, cache management, bundle parsing, type definitions |
+| `paw-candle` | Candle inference engine, quantized model loading, LoRA adapters |
+| `paw-rs` | High-level API (`PawFn` / `PawFnBuilder`) + CLI binary |
 
 Low-level crates are accessible via `paw_rs::paw_core` and `paw_rs::paw_candle`.
+
+---
 
 ## Links
 

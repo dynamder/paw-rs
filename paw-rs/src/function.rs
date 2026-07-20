@@ -61,7 +61,7 @@ impl PawFn {
     ///
     /// ```rust,no_run
     /// use paw_rs::prelude::*;
-    /// # async fn ex() -> Result<(), paw_core::Error> {
+    /// # async fn ex() -> std::result::Result<(), paw_core::Error> {
     /// let mut f = PawFn::builder().slug("email-triage").load().await?;
     /// # Ok(()) }
     /// ```
@@ -73,7 +73,7 @@ impl PawFn {
     ///
     /// ```rust,no_run
     /// use paw_rs::prelude::*;
-    /// # async fn ex() -> Result<(), paw_core::Error> {
+    /// # async fn ex() -> std::result::Result<(), paw_core::Error> {
     /// let mut f = PawFn::builder().slug("email-triage").load().await?;
     /// let out = f.run("Is this urgent?")?;
     /// # Ok(()) }
@@ -86,7 +86,7 @@ impl PawFn {
     ///
     /// ```rust,no_run
     /// use paw_rs::prelude::*;
-    /// # async fn ex() -> Result<(), paw_core::Error> {
+    /// # async fn ex() -> std::result::Result<(), paw_core::Error> {
     /// let mut f = PawFn::builder().slug("email-triage").load().await?;
     /// let out = f.run_with("Is this urgent?", &PawRuntimeOptions {
     ///     max_tokens: Some(50),
@@ -166,7 +166,7 @@ impl PawFnBuilder<Unset> {
     ///
     /// ```rust,no_run
     /// use paw_rs::prelude::*;
-    /// # async fn ex() -> Result<(), paw_core::Error> {
+    /// # async fn ex() -> std::result::Result<(), paw_core::Error> {
     /// let mut f = PawFn::builder().slug("email-triage").load().await?;
     /// # Ok(()) }
     /// ```
@@ -186,7 +186,7 @@ impl PawFnBuilder<Unset> {
     ///
     /// ```rust,no_run
     /// use paw_rs::prelude::*;
-    /// # async fn ex() -> Result<(), paw_core::Error> {
+    /// # async fn ex() -> std::result::Result<(), paw_core::Error> {
     /// let mut f = PawFn::builder()
     ///     .spec("Classify sentiment: return POSITIVE or NEGATIVE")
     ///     .compile().await?;
@@ -213,7 +213,7 @@ impl PawFnBuilder<ForLoad> {
     ///
     /// ```rust,no_run
     /// use paw_rs::prelude::*;
-    /// # async fn ex() -> Result<(), paw_core::Error> {
+    /// # async fn ex() -> std::result::Result<(), paw_core::Error> {
     /// let mut f = PawFn::builder().slug("email-triage").load().await?;
     /// # Ok(()) }
     /// ```
@@ -250,7 +250,7 @@ impl PawFnBuilder<ForCompile> {
     ///
     /// ```rust,no_run
     /// use paw_rs::prelude::*;
-    /// # async fn ex() -> Result<(), paw_core::Error> {
+    /// # async fn ex() -> std::result::Result<(), paw_core::Error> {
     /// let mut f = PawFn::builder()
     ///     .spec("Classify sentiment: return POSITIVE or NEGATIVE")
     ///     .compile().await?;

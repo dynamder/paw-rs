@@ -12,9 +12,9 @@
 use std::process;
 
 use clap::{Parser, Subcommand};
-use paw_core::{CompileRequest, BundleMeta, PawClient, PawConfig, login};
+use paw_core::{CompileRequest, PawClient, PawConfig};
 
-#[derive(Parser)]
+#[derive(Debug, Parser)]
 #[command(name = "paw-rs", about = "ProgramAsWeights: compile and run neural programs")]
 struct Cli {
     #[command(subcommand)]
@@ -25,9 +25,12 @@ struct Cli {
 
     #[arg(long, global = true, help = "API key")]
     api_key: Option<String>,
+
+    #[arg(long, global = true, help = "Output structured JSON (agent-friendly)")]
+    json: bool,
 }
 
-#[derive(Subcommand)]
+#[derive(Debug, Subcommand)]
 enum Command {
     /// Compile a spec on the server
     Compile {
@@ -42,9 +45,6 @@ enum Command {
 
         #[arg(long, help = "Make program private")]
         private: bool,
-
-        #[arg(long, help = "JSON output")]
-        json: bool,
     },
 
     /// Run a program locally
@@ -62,10 +62,7 @@ enum Command {
         temperature: Option<f64>,
 
         #[arg(long, help = "Verbose output")]
-_verbose: bool,
-
-        #[arg(long, help = "JSON output")]
-        json: bool,
+        verbose: bool,
     },
 
     /// Save API key for authentication
@@ -79,24 +76,18 @@ _verbose: bool,
         #[arg(help = "Program ID or current slug")]
         program: String,
 
-        #[arg(help = "New slug (empty string to remove)")]
+        #[arg(help = "New slug (e.g. message-classifier) or empty string to remove")]
         new_slug: String,
-
-        #[arg(long, help = "JSON output")]
-        json: bool,
     },
 
     /// Show program info
     Info {
         #[arg(help = "Program ID or slug")]
         program: String,
-
-        #[arg(long, help = "JSON output")]
-        json: bool,
     },
 }
 
-fn apply_auth_overrides(api_url: Option<&str>, api_key: Option<&str>) {
+fn apply_auth_overrides(api_url: Option<&str>, api_key: Option<&str>, verbose: bool) {
     // SAFETY: Setting env vars before any other code runs is safe in single-threaded startup.
     if let Some(url) = api_url {
         unsafe { std::env::set_var("PAW_API_URL", url); }
@@ -104,29 +95,56 @@ fn apply_auth_overrides(api_url: Option<&str>, api_key: Option<&str>) {
     if let Some(key) = api_key {
         unsafe { std::env::set_var("PAW_API_KEY", key); }
     }
+    if verbose {
+        unsafe { std::env::set_var("PAW_VERBOSE", "1"); }
+    }
+}
+
+fn init_tracing(verbose: bool) {
+    use tracing_subscriber::prelude::*;
+    let filter = if verbose {
+        "debug"
+    } else {
+        "info"
+    };
+    let _ = tracing_subscriber::registry()
+        .with(tracing_subscriber::fmt::layer().with_writer(std::io::stderr))
+        .with(
+            tracing_subscriber::EnvFilter::try_new(filter)
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
+        )
+        .try_init();
 }
 
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
 
-    apply_auth_overrides(cli.api_url.as_deref(), cli.api_key.as_deref());
+    let verbose = match &cli.command {
+        Command::Run { verbose, .. } => *verbose,
+        _ => false,
+    };
+
+    init_tracing(verbose);
+    apply_auth_overrides(cli.api_url.as_deref(), cli.api_key.as_deref(), verbose);
+
+    let json = cli.json;
 
     let result = match &cli.command {
-        Command::Compile { spec, compiler, slug, private, json } => {
-            cmd_compile(spec, compiler.as_deref(), slug.as_deref(), *private, *json).await
+        Command::Compile { spec, compiler, slug, private } => {
+            cmd_compile(spec, compiler.as_deref(), slug.as_deref(), *private, json).await
         }
-        Command::Run { program, input, max_tokens, temperature, _verbose: _, json } => {
-            cmd_run(program, input, *max_tokens, *temperature, false, *json).await
+        Command::Run { program, input, max_tokens, temperature, .. } => {
+            cmd_run(program, input, *max_tokens, *temperature, json).await
         }
         Command::Login { key } => {
             cmd_login(key.as_deref())
         }
-        Command::Rename { program, new_slug, json } => {
-            cmd_rename(program, new_slug, *json).await
+        Command::Rename { program, new_slug } => {
+            cmd_rename(program, new_slug, json).await
         }
-        Command::Info { program, json } => {
-            cmd_info(program, *json).await
+        Command::Info { program } => {
+            cmd_info(program, json).await
         }
     };
 
@@ -143,7 +161,7 @@ async fn main() {
 
 async fn cmd_compile(spec: &str, compiler: Option<&str>, slug: Option<&str>, private: bool, json: bool) -> Result<i32, paw_core::Error> {
     if !json {
-        let preview = if spec.len() > 80 { &spec[..80] } else { spec };
+        let preview: String = spec.chars().take(80).collect();
         println!("Compiling: {preview}...");
     }
 
@@ -193,29 +211,32 @@ async fn cmd_compile(spec: &str, compiler: Option<&str>, slug: Option<&str>, pri
     Ok(0)
 }
 
-async fn cmd_run(program_ref: &str, input: &str, max_tokens: Option<usize>, temperature: Option<f64>, _verbose: bool, json: bool) -> Result<i32, paw_core::Error> {
+async fn cmd_run(program_ref: &str, input: &str, max_tokens: Option<usize>, temperature: Option<f64>, json: bool) -> Result<i32, paw_core::Error> {
     let config = PawConfig::from_env();
+    let client = PawClient::new(&config);
 
-    let builder = paw_rs::PawFn::builder()
-        .config(config)
-        .slug(program_ref);
-
-    // Try to resolve as a program ID first, fallback to slug.
-    let mut func = match builder.load().await {
-        Ok(f) => f,
-        Err(_) => {
-            // If slug loading failed, try as a direct program ID (download by ID).
-            let client = PawClient::new(&PawConfig::from_env());
-            let dir = client.download_paw(program_ref).await?;
-            let candle_config = paw_candle::PawCandleConfig::builder()
-                .core(PawConfig::from_env())
-                .build();
-            let inner = paw_candle::PawFnLoader::new(dir)
-                .config(candle_config)
-                .load()?;
-            paw_rs::PawFn::from_inner(inner)
-        }
+    // 1. Resolve slug → program ID
+    let program_id = match client.resolve_slug(program_ref).await {
+        Ok(id) => id,
+        Err(_) => program_ref.to_string(), // not a slug, treat as raw program ID
     };
+
+    // 2. Download/refresh program bundle
+    let dir = client.download_paw(&program_id).await?;
+
+    // 3. Ensure base model GGUF + tokenizer are cached locally
+    let bundle = paw_core::PawBundle::load_from_dir(&dir)?;
+    let interpreter = bundle.interpreter_model();
+    paw_candle::ensure_assets(&config, &dir, interpreter).await?;
+
+    // 4. Load model via PawFnLoader
+    let candle_config = paw_candle::PawCandleConfig::builder()
+        .core(config)
+        .build();
+    let inner = paw_candle::PawFnLoader::new(dir)
+        .config(candle_config)
+        .load()?;
+    let mut func = paw_rs::PawFn::from_inner(inner);
 
     let opts = paw_candle::PawRuntimeOptions {
         max_tokens,
@@ -239,16 +260,34 @@ async fn cmd_run(program_ref: &str, input: &str, max_tokens: Option<usize>, temp
 }
 
 fn cmd_login(key: Option<&str>) -> Result<i32, paw_core::Error> {
-    match key {
-        Some(k) => {
-            login(k).map_err(|e| paw_core::Error::Io(e))?;
-            println!("API key saved.");
-        }
+    let key = match key {
+        Some(k) => k.to_string(),
         None => {
-            login("").map_err(|e| paw_core::Error::Io(e))?;
-            println!("Login page opened in your browser.");
+            let settings_url = paw_core::config::get_api_url().trim_end_matches('/').to_string() + "/settings";
+            println!("Generate an API key at {settings_url}");
+            if webbrowser::open(&settings_url).is_ok() {
+                println!("Opened browser to {settings_url}");
+            }
+
+            let key = rpassword::prompt_password("Paste your API key: ")
+                .map_err(|e| paw_core::Error::Io(e))?;
+            let key = key.trim().to_string();
+
+            if key.is_empty() {
+                println!("No key provided. Aborted.");
+                return Ok(0);
+            }
+
+            if !key.starts_with("paw_sk_") {
+                println!("Warning: key doesn't start with 'paw_sk_'. Saving anyway.");
+            }
+
+            key
         }
-    }
+    };
+
+    paw_core::login(&key).map_err(|e| paw_core::Error::Io(e))?;
+    println!("API key saved.");
     Ok(0)
 }
 
@@ -274,7 +313,7 @@ async fn cmd_rename(program_ref: &str, new_slug: &str, json: bool) -> Result<i32
     Ok(0)
 }
 
-fn extra_str(meta: &BundleMeta, key: &str, default: &str) -> String {
+fn extra_str(meta: &paw_core::BundleMeta, key: &str, default: &str) -> String {
     meta.extra
         .get(key)
         .and_then(|v| v.as_str())
@@ -328,4 +367,320 @@ async fn cmd_info(program_ref: &str, json: bool) -> Result<i32, paw_core::Error>
         }
     }
     Ok(0)
+}
+
+// ── Tests ──────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn preview(spec: &str) -> String {
+        spec.chars().take(80).collect()
+    }
+
+    // ── Compile ──────────────────────────────────────────────────────
+
+    #[test]
+    fn test_compile_minimal() {
+        let cli = Cli::try_parse_from(&["paw-rs", "compile", "--spec", "hello"]).unwrap();
+        match &cli.command {
+            Command::Compile { spec, compiler, slug, private } => {
+                assert_eq!(spec, "hello");
+                assert!(compiler.is_none());
+                assert!(slug.is_none());
+                assert!(!private);
+            }
+            _ => panic!("expected Compile"),
+        }
+    }
+
+    #[test]
+    fn test_compile_all_flags() {
+        let cli = Cli::try_parse_from(&[
+            "paw-rs", "compile",
+            "--spec", "classify sentiment",
+            "--compiler", "paw-4b",
+            "--slug", "my-classifier",
+            "--private",
+        ]).unwrap();
+        match &cli.command {
+            Command::Compile { spec, compiler, slug, private } => {
+                assert_eq!(spec, "classify sentiment");
+                assert_eq!(compiler.as_deref(), Some("paw-4b"));
+                assert_eq!(slug.as_deref(), Some("my-classifier"));
+                assert!(private);
+            }
+            _ => panic!("expected Compile"),
+        }
+    }
+
+    #[test]
+    fn test_compile_missing_spec_fails() {
+        let err = Cli::try_parse_from(&["paw-rs", "compile"]).unwrap_err();
+        assert!(err.to_string().contains("spec"), "error: {err}");
+    }
+
+    // ── Run ──────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_run_minimal() {
+        let cli = Cli::try_parse_from(&[
+            "paw-rs", "run",
+            "--program", "abc123",
+            "--input", "test input",
+        ]).unwrap();
+        match &cli.command {
+            Command::Run { program, input, max_tokens, temperature, verbose } => {
+                assert_eq!(program, "abc123");
+                assert_eq!(input, "test input");
+                assert!(max_tokens.is_none());
+                assert!(temperature.is_none());
+                assert!(!verbose);
+            }
+            _ => panic!("expected Run"),
+        }
+    }
+
+    #[test]
+    fn test_run_all_flags() {
+        let cli = Cli::try_parse_from(&[
+            "paw-rs", "run",
+            "--program", "abc123",
+            "--input", "hello",
+            "--max-tokens", "256",
+            "--temperature", "0.5",
+            "--verbose",
+        ]).unwrap();
+        match &cli.command {
+            Command::Run { program, input, max_tokens, temperature, verbose } => {
+                assert_eq!(program, "abc123");
+                assert_eq!(input, "hello");
+                assert_eq!(*max_tokens, Some(256));
+                assert!((temperature.clone().unwrap() - 0.5).abs() < 1e-9);
+                assert!(verbose);
+            }
+            _ => panic!("expected Run"),
+        }
+    }
+
+    #[test]
+    fn test_run_missing_program_fails() {
+        let err = Cli::try_parse_from(&["paw-rs", "run", "--input", "x"]).unwrap_err();
+        assert!(err.to_string().contains("program"), "error: {err}");
+    }
+
+    #[test]
+    fn test_run_missing_input_fails() {
+        let err = Cli::try_parse_from(&["paw-rs", "run", "--program", "x"]).unwrap_err();
+        assert!(err.to_string().contains("input"), "error: {err}");
+    }
+
+    // ── Login ────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_login_with_key() {
+        let cli = Cli::try_parse_from(&["paw-rs", "login", "paw_sk_test123"]).unwrap();
+        match &cli.command {
+            Command::Login { key } => {
+                assert_eq!(key.as_deref(), Some("paw_sk_test123"));
+            }
+            _ => panic!("expected Login"),
+        }
+    }
+
+    #[test]
+    fn test_login_without_key() {
+        let cli = Cli::try_parse_from(&["paw-rs", "login"]).unwrap();
+        match &cli.command {
+            Command::Login { key } => {
+                assert!(key.is_none());
+            }
+            _ => panic!("expected Login"),
+        }
+    }
+
+    // ── Rename (positional args) ─────────────────────────────────────
+
+    #[test]
+    fn test_rename() {
+        let cli = Cli::try_parse_from(&["paw-rs", "rename", "abc123", "new-slug"]).unwrap();
+        match &cli.command {
+            Command::Rename { program, new_slug } => {
+                assert_eq!(program, "abc123");
+                assert_eq!(new_slug, "new-slug");
+            }
+            _ => panic!("expected Rename"),
+        }
+    }
+
+    #[test]
+    fn test_rename_empty_slug() {
+        let cli = Cli::try_parse_from(&["paw-rs", "rename", "abc123", ""]).unwrap();
+        match &cli.command {
+            Command::Rename { program, new_slug } => {
+                assert_eq!(program, "abc123");
+                assert_eq!(new_slug, "");
+            }
+            _ => panic!("expected Rename"),
+        }
+    }
+
+    #[test]
+    fn test_rename_missing_arg_fails() {
+        let err = Cli::try_parse_from(&["paw-rs", "rename", "abc123"]).unwrap_err();
+        assert!(err.to_string().contains("requires") || err.to_string().contains("arg"), "error: {err}");
+    }
+
+    #[test]
+    fn test_rename_no_args_fails() {
+        let err = Cli::try_parse_from(&["paw-rs", "rename"]).unwrap_err();
+        assert!(err.to_string().contains("program") || err.to_string().contains("arg") || err.to_string().contains("requires"), "error: {err}");
+    }
+
+    // ── Info (positional arg) ────────────────────────────────────────
+
+    #[test]
+    fn test_info() {
+        let cli = Cli::try_parse_from(&["paw-rs", "info", "abc123"]).unwrap();
+        match &cli.command {
+            Command::Info { program } => {
+                assert_eq!(program, "abc123");
+            }
+            _ => panic!("expected Info"),
+        }
+    }
+
+    #[test]
+    fn test_info_missing_arg_fails() {
+        let err = Cli::try_parse_from(&["paw-rs", "info"]).unwrap_err();
+        assert!(err.to_string().contains("program") || err.to_string().contains("required"), "error: {err}");
+    }
+
+    // ── Global flags ─────────────────────────────────────────────────
+
+    #[test]
+    fn test_global_json_with_compile() {
+        let cli = Cli::try_parse_from(&["paw-rs", "--json", "compile", "--spec", "x"]).unwrap();
+        assert!(cli.json);
+        match &cli.command {
+            Command::Compile { .. } => {}
+            _ => panic!("expected Compile"),
+        }
+    }
+
+    #[test]
+    fn test_global_json_with_run() {
+        let cli = Cli::try_parse_from(&[
+            "paw-rs", "--json", "run",
+            "--program", "x", "--input", "y",
+        ]).unwrap();
+        assert!(cli.json);
+        match &cli.command {
+            Command::Run { .. } => {}
+            _ => panic!("expected Run"),
+        }
+    }
+
+    #[test]
+    fn test_global_json_not_set() {
+        let cli = Cli::try_parse_from(&["paw-rs", "compile", "--spec", "x"]).unwrap();
+        assert!(!cli.json);
+    }
+
+    #[test]
+    fn test_global_api_url() {
+        let cli = Cli::try_parse_from(&[
+            "paw-rs", "--api-url", "https://custom.example.com",
+            "compile", "--spec", "x",
+        ]).unwrap();
+        assert_eq!(cli.api_url.as_deref(), Some("https://custom.example.com"));
+    }
+
+    #[test]
+    fn test_global_api_key() {
+        let cli = Cli::try_parse_from(&[
+            "paw-rs", "--api-key", "sk_test",
+            "compile", "--spec", "x",
+        ]).unwrap();
+        assert_eq!(cli.api_key.as_deref(), Some("sk_test"));
+    }
+
+    #[test]
+    fn test_global_both() {
+        let cli = Cli::try_parse_from(&[
+            "paw-rs",
+            "--api-url", "https://a.com",
+            "--api-key", "sk_test",
+            "compile", "--spec", "x",
+        ]).unwrap();
+        assert_eq!(cli.api_url.as_deref(), Some("https://a.com"));
+        assert_eq!(cli.api_key.as_deref(), Some("sk_test"));
+    }
+
+    #[test]
+    fn test_json_does_not_apply_to_login() {
+        let cli = Cli::try_parse_from(&["paw-rs", "--json", "login"]).unwrap();
+        assert!(cli.json);
+    }
+
+    // ── UTF-8 safe preview ───────────────────────────────────────────
+
+    #[test]
+    fn test_utf8_preview_ascii() {
+        assert_eq!(preview("hello world"), "hello world");
+    }
+
+    #[test]
+    fn test_utf8_preview_short() {
+        assert_eq!(preview("ab"), "ab");
+    }
+
+    #[test]
+    fn test_utf8_preview_exact_80() {
+        let s = "a".repeat(80);
+        let p = preview(&s);
+        assert_eq!(p.chars().count(), 80);
+        assert_eq!(p, s);
+    }
+
+    #[test]
+    fn test_utf8_preview_long() {
+        let s = "a".repeat(200);
+        assert_eq!(preview(&s).chars().count(), 80);
+    }
+
+    #[test]
+    fn test_utf8_preview_multi_byte() {
+        let s = "你好世界".repeat(30);
+        let p = preview(&s);
+        assert_eq!(p.chars().count(), 80);
+        assert!(p.chars().all(|c| c.len_utf8() <= 3));
+    }
+
+    #[test]
+    fn test_utf8_preview_emoji() {
+        let s = "😀".repeat(100);
+        let p = preview(&s);
+        assert_eq!(p.chars().count(), 80);
+    }
+
+    #[test]
+    fn test_utf8_preview_mixed() {
+        assert_eq!(preview("abc😀def"), "abc😀def");
+    }
+
+    // ── Unknown / missing subcommand ─────────────────────────────────
+
+    #[test]
+    fn test_unknown_subcommand_fails() {
+        let err = Cli::try_parse_from(&["paw-rs", "unknown"]).unwrap_err();
+        assert!(err.kind() == clap::error::ErrorKind::InvalidSubcommand);
+    }
+
+    #[test]
+    fn test_no_args_fails() {
+        let err = Cli::try_parse_from(&["paw-rs"]).unwrap_err();
+        assert!(err.to_string().contains("subcommand") || err.to_string().contains("Usage"), "error: {err}");
+    }
 }

@@ -8,23 +8,9 @@ pub struct Tokenizer {
 }
 
 impl Tokenizer {
-    /// Load a tokenizer from a PAW bundle directory.
-    /// Looks for the GGUF-matched ByteLevel tokenizer in base_models dir first.
+    /// Load a tokenizer from the program bundle directory.
+    /// Always uses the HuggingFace `tokenizer.json` from the program directory.
     pub fn new(bundle: &PawBundle) -> Result<Self, Error> {
-        // For Qwen3 models, prefer the GGUF-matched ByteLevel tokenizer
-        let model_name = bundle.interpreter_model().to_lowercase();
-        if model_name.contains("qwen") {
-            let bl_path = bundle
-                .program_dir
-                .parent()
-                .and_then(|p| p.parent())
-                .map(|p| p.join("base_models").join("qwen3-tokenizer-bytelevel.json"));
-            if let Some(ref bl) = bl_path {
-                if bl.exists() {
-                    return Self::from_file(bl);
-                }
-            }
-        }
         Self::from_file(bundle.program_dir.join("tokenizer.json"))
     }
 
