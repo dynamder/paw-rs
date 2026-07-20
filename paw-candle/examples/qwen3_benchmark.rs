@@ -65,22 +65,24 @@ async fn main() -> Result<()> {
         }
     }
 
-    // Statistics (keep first run separate before sorting)
+    // Statistics: first run = cold start, rest = steady state
     let first = timings[0];
-    let mut sorted = timings.clone();
-    sorted.sort();
+    let steady: Vec<Duration> = timings.iter().skip(1).copied().collect();
     let avg: Duration = timings.iter().sum::<Duration>() / n_runs as u32;
-    let steady: Vec<&Duration> = sorted.iter().skip(1).collect();
-    let steady_avg: Duration = steady.iter().copied().sum::<Duration>() / steady.len() as u32;
-    let steady_min = **steady.iter().min().unwrap();
-    let steady_max = **steady.iter().max().unwrap();
+    let steady_avg = if !steady.is_empty() {
+        steady.iter().sum::<Duration>() / steady.len() as u32
+    } else {
+        Duration::ZERO
+    };
+    let steady_min = steady.iter().min().copied().unwrap_or(Duration::ZERO);
+    let steady_max = steady.iter().max().copied().unwrap_or(Duration::ZERO);
 
     println!();
     println!("═══ Benchmark Results ═══");
     println!("  Input:      {input:?}");
     println!("  Max tokens: {max_tokens}");
     println!("  Runs:       {n_runs}");
-    println!("  First call (cold): {:.1}ms", first.as_secs_f64() * 1000.0);
+      println!("  First call (cold): {:.1}ms", first.as_secs_f64() * 1000.0);
     println!("  Steady avg:       {:.1}ms", steady_avg.as_secs_f64() * 1000.0);
     println!("  Steady min:       {:.1}ms", steady_min.as_secs_f64() * 1000.0);
     println!("  Steady max:       {:.1}ms", steady_max.as_secs_f64() * 1000.0);
