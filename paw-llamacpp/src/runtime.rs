@@ -192,10 +192,10 @@ impl PawFnLoader {
         self
     }
 
-    pub fn load(self) -> Result<PawFunction, Error> {
+    pub fn load(self) -> Result<Box<PawFunction>, Error> {
         let bundle = self.load_bundle()?;
         let (backend, model, adapter) = self.load_model(&bundle)?;
-        self.assemble(bundle, backend, model, adapter)
+        self.assemble_boxed(bundle, backend, model, adapter)
     }
 
     fn load_bundle(&self) -> Result<PawBundle, Error> {
@@ -250,13 +250,13 @@ impl PawFnLoader {
         Ok((backend, model, adapter))
     }
 
-    fn assemble(
+    fn assemble_boxed(
         &self,
         bundle: PawBundle,
         backend: LlamaBackend,
         model: LlamaModel,
         adapter: Option<LlamaLoraAdapter>,
-    ) -> Result<PawFunction, Error> {
+    ) -> Result<Box<PawFunction>, Error> {
         let n_ctx = self.config.core.n_ctx() as usize;
         let eos_token_id = eos_from_gguf(&model);
         let (prefix_text, suffix_text) = bundle.split_template();
@@ -266,7 +266,8 @@ impl PawFnLoader {
             .map_err(|e| Error::Other(format!("tokenize prefix: {e}")))?;
         let n_prefix = prefix_tokens.len();
 
-        let mut pf = PawFunction {
+        // Create Box FIRST so model/backend are on the heap
+        let mut pf = Box::new(PawFunction {
             bundle: ModelBundle { model, backend },
             adapter,
             ctx: RefCell::new(None),
@@ -278,9 +279,9 @@ impl PawFnLoader {
             prefix_evaluated: RefCell::new(false),
             eos_token_id,
             interpreter: bundle.interpreter_model().to_string(),
-        };
+        });
 
-        // Now create context from model already in PawFunction
+        // Create context from model already on the heap inside the Box
         let mut cp = LlamaContextParams::default().with_n_ctx(Some(
             NonZeroU32::new(n_ctx as u32).unwrap_or(NonZeroU32::new(2048).unwrap()),
         ));

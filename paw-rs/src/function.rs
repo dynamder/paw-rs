@@ -8,7 +8,7 @@ fn backend_load(dir: std::path::PathBuf, config: PawConfig) -> Result<Box<dyn Pa
     let inner = PawFnLoader::new(dir)
         .config(PawLlamaCppConfig::builder().core(config).build())
         .load()?;
-    Ok(Box::new(inner) as Box<dyn PawFnTrait>)
+    Ok(inner as Box<dyn PawFnTrait>)
 }
 
 #[cfg(feature = "candle")]
