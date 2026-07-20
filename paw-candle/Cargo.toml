@@ -16,6 +16,8 @@ cuda = [
     "candle-nn/cuda",
 ]
 metal = []
+mkl = ["candle-core/mkl"]
+accelerate = ["candle-core/accelerate"]
 
 [dependencies]
 paw-core = { version = "0.1", path = "../paw-core" }
