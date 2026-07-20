@@ -1,0 +1,32 @@
+paw-llamacpp/examples/llamacpp_benchmark.rs
+  s_49ae7ceabb4fd4::t_bf680da8c91e47 33-35,38,40-42,45-46,48-53,55-63,65-82
+  s_49ae7ceabb4fd4::t_fef985ee7c53d6 36,39,43,54
+  s_49ae7ceabb4fd4::t_f24ec538152eee 29,37
+  s_49ae7ceabb4fd4::t_0da0ed980c8351 83-86
+paw-llamacpp/examples/minimal_test.rs
+  s_49ae7ceabb4fd4::t_c4354c74928058 21
+  s_49ae7ceabb4fd4::t_ffb2d7fba0f39d 25
+  s_49ae7ceabb4fd4::t_9b5c5cfbdd0965 1-2,26-28,46-47,51,57-58,64-65,74
+  s_49ae7ceabb4fd4::t_5c82eb6b783f22 3-9,11-20,22-24,29-45,48-50,52-56,59-63,66-73,75-76
+  s_49ae7ceabb4fd4::t_d7964529b6ca09 10
+paw-llamacpp/examples/llamacpp_nolora.rs
+  s_49ae7ceabb4fd4::t_8a413ae5f4f97c 1-88
+paw-llamacpp/src/runtime.rs
+  s_49ae7ceabb4fd4::t_ec49d021388dba 264,273-289,300-303,306,313,318,320,326
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "88e6100752bf5b60e4ddecae948c15cecbb41424",
+  "prompts": {},
+  "sessions": {
+    "s_49ae7ceabb4fd4": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_082221e4bffeWZAa8KbyXkAEhd",
+        "model": "unknown"
+      },
+      "human_author": "dynamder <igaster@163.com>"
+    }
+  }
+}
