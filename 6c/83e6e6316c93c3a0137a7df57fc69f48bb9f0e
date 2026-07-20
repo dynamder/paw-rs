@@ -1,0 +1,23 @@
+README.md
+  s_49ae7ceabb4fd4::t_bd27677f439e37 17-23,28,35,45,52,62-64,68,72-77,82,89,94-99,107,109-115,118-119,121-122,124-125,130,132-136,140,142-147,155-161,164-165,167-168,170-171
+paw-llamacpp/Cargo.toml
+  s_49ae7ceabb4fd4::t_55ff39af6fe376 3
+README.en.md
+  s_49ae7ceabb4fd4::t_cb033a5331365a 17-23,28,35,45,52,62-64,68,72-77,82,89,94-99,109,111,113,115-121,124-125,127-128,130-131,136,138-143,147,149-154,162-168,171-172,174-175,177-178
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "6c83e6e6316c93c3a0137a7df57fc69f48bb9f0e",
+  "prompts": {},
+  "sessions": {
+    "s_49ae7ceabb4fd4": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_082221e4bffeWZAa8KbyXkAEhd",
+        "model": "unknown"
+      },
+      "human_author": "dynamder <igaster@163.com>"
+    }
+  }
+}
