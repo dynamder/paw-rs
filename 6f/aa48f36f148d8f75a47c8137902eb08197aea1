@@ -1,0 +1,43 @@
+paw-rs/src/lib.rs
+  s_49ae7ceabb4fd4::t_3c3fb96ef2e8ef 96-98,102,104
+paw-candle/src/lib.rs
+  s_49ae7ceabb4fd4::t_edfc57ac77639b 52
+  s_49ae7ceabb4fd4::t_64ec31b890f2b8 50
+  s_49ae7ceabb4fd4::t_53ab2817c4d786 62
+paw-core/src/runtime.rs
+  s_49ae7ceabb4fd4::t_19261c43fbf1d3 1-2,5-6,24-25,31-145
+paw-llamacpp/src/lib.rs
+  s_49ae7ceabb4fd4::t_e3fca01cc4e81f 5
+  s_49ae7ceabb4fd4::t_8d9630e99cced1 1
+paw-llamacpp/src/backend.rs
+  s_49ae7ceabb4fd4::t_2fb2fe9bf69977 13-14
+  s_49ae7ceabb4fd4::t_bee4e58dd3878a 1-12,15-48
+paw-candle/src/interpreter.rs
+  s_49ae7ceabb4fd4::t_4bc66bf9eb6028 5,7-8,10-14,18,21,23-25,32,35,42,44,46-52,55-60,62-67,69-76
+  s_49ae7ceabb4fd4::t_e3030a082fb140 53,77
+  s_49ae7ceabb4fd4::t_79621c5b503f13 15-17,19-20
+paw-rs/src/prelude.rs
+  s_49ae7ceabb4fd4::t_4a3d7e816d1ea5 1
+paw-core/src/prelude.rs
+  s_49ae7ceabb4fd4::t_6c6687bf7e7182 15-18
+paw-core/src/lib.rs
+  s_49ae7ceabb4fd4::t_1f8506d665c776 120-123
+paw-rs/src/function.rs
+  s_49ae7ceabb4fd4::t_0c23ee63754d2d 3-8,11,14,24,26-40,43,45,49,56,62-69,72,77-80,83-90,94-103,119-122,126-131,133-138,142-147,153-158,164-169,178-184,193-194,198-202,205-206,214-219,225-227,233-234,240-243,245
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "6faa48f36f148d8f75a47c8137902eb08197aea1",
+  "prompts": {},
+  "sessions": {
+    "s_49ae7ceabb4fd4": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_082221e4bffeWZAa8KbyXkAEhd",
+        "model": "unknown"
+      },
+      "human_author": "dynamder <igaster@163.com>"
+    }
+  }
+}
