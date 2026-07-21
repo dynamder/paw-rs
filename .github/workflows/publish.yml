@@ -1,0 +1,97 @@
+name: Publish
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check tag matches workspace version
+        run: |
+          TAG=${GITHUB_REF#refs/tags/v}
+          VERSION=$(grep -m1 '^version' Cargo.toml | sed 's/.*"\(.*\)".*/\1/')
+          if [ "$TAG" != "$VERSION" ]; then
+            echo "::error::Tag v$TAG doesn't match workspace version $VERSION"
+            exit 1
+          fi
+          echo "Releasing version $VERSION"
+
+  check-ci:
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Wait for CI workflow to pass
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          COMMIT=$(git rev-parse HEAD)
+          for i in $(seq 1 90); do
+            SUITE=$(gh api "repos/$GITHUB_REPOSITORY/commits/$COMMIT/check-suites" \
+              --jq '[.check_suites[] | select(.app.slug=="github-actions")] | first')
+            CONCLUSION=$(echo "$SUITE" | jq -r '.conclusion // empty')
+            STATUS=$(echo "$SUITE" | jq -r '.status // empty')
+            case "$CONCLUSION" in
+              success) echo "CI passed"; exit 0 ;;
+              failure|cancelled|timed_out|action_required)
+                echo "::error::CI $CONCLUSION"; exit 1 ;;
+            esac
+            echo "[$i/90] CI status=$STATUS, waiting..."
+            sleep 15
+          done
+          echo "::error::Timed out waiting for CI (22.5 min)"
+          exit 1
+
+  dry-run:
+    needs: [verify, check-ci]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo publish -p paw-core --dry-run
+      - run: cargo publish -p paw-candle --dry-run
+      - run: cargo publish -p paw-llamacpp --dry-run
+      - run: cargo publish -p paw-rs --dry-run
+
+  publish-core:
+    needs: dry-run
+    runs-on: ubuntu-latest
+    environment: crates.io
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo publish -p paw-core
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+  publish-backends:
+    needs: publish-core
+    runs-on: ubuntu-latest
+    environment: crates.io
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo publish -p paw-candle
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+      - run: cargo publish -p paw-llamacpp
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+  publish-paw-rs:
+    needs: publish-backends
+    runs-on: ubuntu-latest
+    environment: crates.io
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo publish -p paw-rs
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
