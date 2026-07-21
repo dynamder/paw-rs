@@ -1,9 +1,10 @@
 use std::cell::RefCell;
 use std::num::NonZeroU32;
 use std::path::PathBuf;
+use std::sync::Once;
 
-use llama_cpp_2::context::LlamaContext;
 use llama_cpp_2::context::params::LlamaContextParams;
+use llama_cpp_2::context::LlamaContext;
 use llama_cpp_2::llama_backend::LlamaBackend;
 use llama_cpp_2::llama_batch::LlamaBatch;
 use llama_cpp_2::model::params::LlamaModelParams;
@@ -14,6 +15,23 @@ use paw_core::{Error, PawBundle, PawFnTrait, PawRuntimeOptions};
 
 use crate::config::PawLlamaCppConfig;
 
+static INIT: Once = Once::new();
+static mut BACKEND_PTR: *const LlamaBackend = std::ptr::null();
+
+fn global_backend() -> &'static LlamaBackend {
+    unsafe {
+        INIT.call_once(|| {
+            let mut backend = LlamaBackend::init().expect("failed to initialize llama.cpp backend");
+            #[cfg(not(feature = "tracing"))]
+            backend.void_logs();
+            #[cfg(feature = "tracing")]
+            llama_cpp_2::send_logs_to_tracing(llama_cpp_2::LogOptions::default());
+            BACKEND_PTR = Box::into_raw(Box::new(backend));
+        });
+        &*BACKEND_PTR
+    }
+}
+
 fn eos_from_gguf(model: &LlamaModel) -> u32 {
     model
         .meta_val_str("tokenizer.ggml.eos_token_id")
@@ -22,10 +40,8 @@ fn eos_from_gguf(model: &LlamaModel) -> u32 {
         .unwrap_or(0)
 }
 
-#[allow(dead_code)]
 struct ModelBundle {
     model: LlamaModel,
-    backend: LlamaBackend,
 }
 
 #[allow(dead_code)]
@@ -193,8 +209,8 @@ impl PawFnLoader {
 
     pub fn load(self) -> Result<Box<PawFunction>, Error> {
         let bundle = self.load_bundle()?;
-        let (backend, model, adapter) = self.load_model(&bundle)?;
-        self.assemble_boxed(bundle, backend, model, adapter)
+        let (model, adapter) = self.load_model(&bundle)?;
+        self.assemble_boxed(bundle, model, adapter)
     }
 
     fn load_bundle(&self) -> Result<PawBundle, Error> {
@@ -204,7 +220,7 @@ impl PawFnLoader {
     fn load_model(
         &self,
         bundle: &PawBundle,
-    ) -> Result<(LlamaBackend, LlamaModel, Option<LlamaLoraAdapter>), Error> {
+    ) -> Result<(LlamaModel, Option<LlamaLoraAdapter>), Error> {
         use paw_core::cache::known_models;
         let model_name = bundle.interpreter_model();
         let filename = match model_name {
@@ -219,21 +235,13 @@ impl PawFnLoader {
                 gguf_path.display()
             )));
         }
-        //info!("Loading GGUF: {}", gguf_path.display());
-        #[allow(unused_mut)]
-        let mut backend =
-            LlamaBackend::init().map_err(|e| Error::Other(format!("backend: {e}")))?;
-        #[cfg(feature = "tracing")]
-        llama_cpp_2::send_logs_to_tracing(llama_cpp_2::LogOptions::default());
-        #[cfg(not(feature = "tracing"))]
-        backend.void_logs();
         let n_layers = self.config.n_gpu_layers.max(0) as u32;
         let mp = if n_layers > 0 {
             LlamaModelParams::default().with_n_gpu_layers(n_layers)
         } else {
             LlamaModelParams::default()
         };
-        let model = LlamaModel::load_from_file(&backend, &gguf_path, &mp)
+        let model = LlamaModel::load_from_file(global_backend(), &gguf_path, &mp)
             .map_err(|e| Error::Other(format!("model load: {e}")))?;
         //info!("Model loaded ({} params)", model.n_params());
 
@@ -246,13 +254,12 @@ impl PawFnLoader {
         } else {
             None
         };
-        Ok((backend, model, adapter))
+        Ok((model, adapter))
     }
 
     fn assemble_boxed(
         &self,
         bundle: PawBundle,
-        backend: LlamaBackend,
         model: LlamaModel,
         adapter: Option<LlamaLoraAdapter>,
     ) -> Result<Box<PawFunction>, Error> {
@@ -265,9 +272,9 @@ impl PawFnLoader {
             .map_err(|e| Error::Other(format!("tokenize prefix: {e}")))?;
         let n_prefix = prefix_tokens.len();
 
-        // Create Box FIRST so model/backend are on the heap
+        // Create Box FIRST so model is on the heap
         let mut pf = Box::new(PawFunction {
-            bundle: ModelBundle { model, backend },
+            bundle: ModelBundle { model },
             adapter,
             ctx: RefCell::new(None),
             n_ctx,
@@ -294,7 +301,7 @@ impl PawFnLoader {
         let ctx = pf
             .bundle
             .model
-            .new_context(&pf.bundle.backend, cp)
+            .new_context(global_backend(), cp)
             .map_err(|e| Error::Other(format!("new_context: {e}")))?;
 
         if let Some(ref mut a) = pf.adapter {
