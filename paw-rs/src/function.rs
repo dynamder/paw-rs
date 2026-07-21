@@ -29,7 +29,7 @@ pub struct ForCompile;
 /// ```rust,no_run
 /// use paw_core::{Candle, Qwen3_0_6B};
 /// use paw_rs::prelude::*;
-/// # async fn example() -> Result<(), paw_core::Error> {
+/// # async fn example() -> Result<()> {
 /// let mut f = PawFn::<Qwen3_0_6B, Candle>::load_slug("email-triage").await?;
 /// println!("{}", f.run("Help!")?);
 /// # Ok(()) }
@@ -198,7 +198,7 @@ impl PawFnBuilder<ForLoad> {
             (None, None) => {
                 return Err(Error::Other(
                     "requires .slug() or .id() before .load()".into(),
-                ))
+                ));
             }
         };
         let dir = client.download_paw(&program_id).await?;
@@ -221,7 +221,9 @@ impl PawFnBuilder<ForCompile> {
     pub async fn compile(self) -> Result<Box<dyn PawFnTrait>, Error> {
         let spec = self.spec.expect("spec must be set for ForCompile");
         let request = {
-            let mut b = CompileRequest::builder().spec(spec).ephemeral(self.ephemeral);
+            let mut b = CompileRequest::builder()
+                .spec(spec)
+                .ephemeral(self.ephemeral);
             if let Some(ref c) = self.compiler {
                 b = b.compiler(c);
             }

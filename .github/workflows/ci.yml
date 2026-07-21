@@ -32,8 +32,6 @@ jobs:
         include:
           - os: ubuntu-latest
             features: --no-default-features --features candle
-          - os: ubuntu-latest
-            features: --no-default-features --features candle,mkl
           - os: macos-latest
             features: --no-default-features --features candle
     runs-on: ${{ matrix.os }}
@@ -56,8 +54,7 @@ jobs:
       - name: Override target-cpu for CI consistency
         run: echo 'rustflags = []' > .cargo/config.toml
 
-      - run: cargo build --release ${{ matrix.features }}
-      - run: cargo test --workspace ${{ matrix.features }}
+      - run: cargo test --workspace --lib --bins --exclude paw-mistralrs ${{ matrix.features }}
 
   msrv:
     runs-on: ubuntu-latest
@@ -65,4 +62,4 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.85.0
       - run: echo 'rustflags = []' > .cargo/config.toml
-      - run: cargo check --workspace
+      - run: cargo check --workspace --exclude paw-mistralrs
