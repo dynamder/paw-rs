@@ -1,0 +1,19 @@
+.github/workflows/publish.yml
+  s_3f43af9deaeb80::t_2a4a13c654a47b 53,59,71-72,87
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "67a876ef19806d337400d5203be1e5b1f7e301ad",
+  "prompts": {},
+  "sessions": {
+    "s_3f43af9deaeb80": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_07a762834ffeiAV7wAap9KL7pa",
+        "model": "unknown"
+      },
+      "human_author": "dynamder <igaster@163.com>"
+    }
+  }
+}
