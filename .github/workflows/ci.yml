@@ -20,6 +20,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+      - name: Workaround ring crate on macOS ARM
+        if: runner.os == 'macOS'
+        run: echo 'RUSTFLAGS=--cfg ring_aarch64_macos_no_polyfill' >> $GITHUB_ENV
+
       - run: cargo fmt --check
       - run: cargo clippy --all-targets
 
@@ -53,6 +57,10 @@ jobs:
 
       - name: Override target-cpu for CI consistency
         run: echo 'rustflags = []' > .cargo/config.toml
+
+      - name: Workaround ring crate on macOS ARM
+        if: runner.os == 'macOS'
+        run: echo 'RUSTFLAGS=--cfg ring_aarch64_macos_no_polyfill' >> $GITHUB_ENV
 
       - run: cargo test --workspace --exclude paw-mistralrs ${{ matrix.features }}
 
