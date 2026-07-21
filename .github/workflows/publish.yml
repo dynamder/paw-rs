@@ -49,24 +49,14 @@ jobs:
           echo "::error::Timed out waiting for CI (22.5 min)"
           exit 1
 
-  dry-run:
-    needs: [verify, check-ci]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - run: cargo publish -p paw-core --dry-run
-      - run: cargo publish -p paw-candle --dry-run
-      - run: cargo publish -p paw-llamacpp --dry-run
-      - run: cargo publish -p paw-rs --dry-run
-
   publish-core:
-    needs: dry-run
+    needs: [verify, check-ci]
     runs-on: ubuntu-latest
     environment: crates.io
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - run: cargo publish -p paw-core --dry-run
       - run: cargo publish -p paw-core
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
@@ -78,6 +68,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - run: cargo publish -p paw-candle --dry-run
+      - run: cargo publish -p paw-llamacpp --dry-run
       - run: cargo publish -p paw-candle
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
@@ -92,6 +84,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - run: cargo publish -p paw-rs --dry-run
       - run: cargo publish -p paw-rs
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
