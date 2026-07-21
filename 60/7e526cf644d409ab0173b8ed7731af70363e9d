@@ -1,0 +1,24 @@
+paw-rs/examples/typed_api.rs
+  s_cf1244a8d3b969::t_d825ff1eb41370 17,21
+.github/workflows/ci.yml
+  s_cf1244a8d3b969::t_5de553b7f3c1b9 23-26,61-63
+  s_cf1244a8d3b969::t_5e512a1900a9b5 64
+Cargo.lock
+  s_cf1244a8d3b969::t_36cee43bbcf714 6523
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "607e526cf644d409ab0173b8ed7731af70363e9d",
+  "prompts": {},
+  "sessions": {
+    "s_cf1244a8d3b969": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_07c718024ffedMUsrYE3ZM4b7D",
+        "model": "unknown"
+      },
+      "human_author": "dynamder <igaster@163.com>"
+    }
+  }
+}
