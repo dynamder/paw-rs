@@ -214,7 +214,8 @@ impl Qwen3Model {
             });
         }
 
-        eprintln!(
+        #[cfg(feature = "tracing")]
+        tracing::info!(
             "Qwen3 loaded: {} layers, hidden={}, heads={}, kv={}, dim={}, intermediate={}, vocab={}, theta={}, eps={}",
             config.num_hidden_layers,
             config.hidden_size,

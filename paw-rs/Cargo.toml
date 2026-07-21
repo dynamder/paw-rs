@@ -40,3 +40,7 @@ cuda   = ["paw-candle?/cuda",   "paw-llamacpp?/cuda"]
 metal  = ["paw-candle?/metal",  "paw-llamacpp?/metal"]
 mkl    = ["paw-candle?/mkl"]
 accelerate = ["paw-candle?/accelerate"]
+tracing = [
+    "paw-candle?/tracing",
+    "paw-llamacpp?/tracing",
+]

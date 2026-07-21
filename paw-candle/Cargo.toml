@@ -11,6 +11,7 @@ documentation.workspace = true
 
 [features]
 default = []
+tracing = ["dep:tracing"]
 cuda = [
     "candle-core/cuda",
     "candle-nn/cuda",
@@ -31,6 +32,7 @@ thiserror = "2"
 ahash = "0.8"
 rayon = "1"
 memmap2 = "0.9"
+tracing = { version = "0.1", optional = true }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt", "macros"] }

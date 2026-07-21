@@ -11,6 +11,7 @@ documentation.workspace = true
 
 [features]
 default = []
+tracing = []
 cuda = ["llama-cpp-2/cuda"]
 metal = ["llama-cpp-2/metal"]
 vulkan = ["llama-cpp-2/vulkan"]

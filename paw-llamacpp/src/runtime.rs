@@ -220,7 +220,13 @@ impl PawFnLoader {
             )));
         }
         //info!("Loading GGUF: {}", gguf_path.display());
-        let backend = LlamaBackend::init().map_err(|e| Error::Other(format!("backend: {e}")))?;
+        #[allow(unused_mut)]
+        let mut backend =
+            LlamaBackend::init().map_err(|e| Error::Other(format!("backend: {e}")))?;
+        #[cfg(feature = "tracing")]
+        llama_cpp_2::send_logs_to_tracing(llama_cpp_2::LogOptions::default());
+        #[cfg(not(feature = "tracing"))]
+        backend.void_logs();
         let n_layers = self.config.n_gpu_layers.max(0) as u32;
         let mp = if n_layers > 0 {
             LlamaModelParams::default().with_n_gpu_layers(n_layers)

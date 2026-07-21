@@ -194,10 +194,7 @@ pub fn login(key: &str) -> std::io::Result<()> {
 /// Clear the entire local PAW cache (base models, programs, runtimes).
 pub fn clear_cache(config: &PawConfig) -> Result<()> {
     let cache = CacheManager::new(config);
-    let size = cache.total_size().unwrap_or(0);
-    cache.clear()?;
-    println!("Cleared {:.1} MB from cache", size as f64 / 1_048_576.0);
-    Ok(())
+    cache.clear()
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────
