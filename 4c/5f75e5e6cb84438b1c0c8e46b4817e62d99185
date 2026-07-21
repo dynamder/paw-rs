@@ -1,0 +1,40 @@
+paw-llamacpp/src/runtime.rs
+  s_cf1244a8d3b969::t_0c9e67443e253c 235-239
+  s_49ae7ceabb4fd4::t_4fd6c021c22ceb 6
+paw-core/src/client.rs
+  s_cf1244a8d3b969::t_7d7a45f2243450 297
+paw-candle/src/runtime.rs
+  s_cf1244a8d3b969::t_c0e1faeddda651 373-375,377,379
+deny.toml
+  s_cf1244a8d3b969::t_b61ca43378e078 1-26
+.github/workflows/audit.yml
+  s_cf1244a8d3b969::t_5e1252ecd47b20 1-25
+.github/workflows/ci.yml
+  s_cf1244a8d3b969::t_b32099a560a646 1-68
+Cargo.lock
+  s_cf1244a8d3b969::t_5d24a0db188300 521,1565,1868-1869,1879-1880,1890-1891,2527-2528,3404,3542,3702,3783,3811,4548,5194-5195,5206,6700,6733,6767,7079,7130,7133,7141,8367
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "4c5f75e5e6cb84438b1c0c8e46b4817e62d99185",
+  "prompts": {},
+  "sessions": {
+    "s_49ae7ceabb4fd4": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_082221e4bffeWZAa8KbyXkAEhd",
+        "model": "unknown"
+      },
+      "human_author": "dynamder <igaster@163.com>"
+    },
+    "s_cf1244a8d3b969": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_07c718024ffedMUsrYE3ZM4b7D",
+        "model": "unknown"
+      },
+      "human_author": "dynamder <igaster@163.com>"
+    }
+  }
+}
