@@ -1,0 +1,21 @@
+Cargo.toml
+  s_3f43af9deaeb80::t_a9ba5eddeea14e 6
+Cargo.lock
+  s_3f43af9deaeb80::t_66082a573aac27 4475,4496,4511,4521,4537
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "edc4409acdcab977de44afb5e928ca3e8bc1164e",
+  "prompts": {},
+  "sessions": {
+    "s_3f43af9deaeb80": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_07a762834ffeiAV7wAap9KL7pa",
+        "model": "unknown"
+      },
+      "human_author": "dynamder <igaster@163.com>"
+    }
+  }
+}
