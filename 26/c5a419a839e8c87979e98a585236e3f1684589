@@ -1,0 +1,32 @@
+paw-llamacpp/src/runtime.rs
+  s_3f43af9deaeb80::t_5c92f2d2b28576 257
+  s_3f43af9deaeb80::t_6d9a0c78e2109b 223
+  s_3f43af9deaeb80::t_c8a2e2f431b4fc 212-213
+  s_3f43af9deaeb80::t_c00c575c6f8f80 304
+  s_3f43af9deaeb80::t_454665cc7395b7 4,7
+  s_49ae7ceabb4fd4::t_cfb6a7c5684add 18-34,244,275,277
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "26c5a419a839e8c87979e98a585236e3f1684589",
+  "prompts": {},
+  "sessions": {
+    "s_3f43af9deaeb80": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_07a762834ffeiAV7wAap9KL7pa",
+        "model": "unknown"
+      },
+      "human_author": "dynamder <igaster@163.com>"
+    },
+    "s_49ae7ceabb4fd4": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_082221e4bffeWZAa8KbyXkAEhd",
+        "model": "unknown"
+      },
+      "human_author": "dynamder <igaster@163.com>"
+    }
+  }
+}
