@@ -1,0 +1,22 @@
+.github/workflows/publish.yml
+  s_3f43af9deaeb80::t_f6c0f8ff6fb022 26,28-53
+  s_3f43af9deaeb80::t_c6fd607541ad8e 1-25,27,54-97
+paw-llamacpp/src/runtime.rs
+  s_3f43af9deaeb80::t_1420b78afd47b4 7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "83756936b98f04e55ef4ee038f8d22b2b857f997",
+  "prompts": {},
+  "sessions": {
+    "s_3f43af9deaeb80": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_07a762834ffeiAV7wAap9KL7pa",
+        "model": "unknown"
+      },
+      "human_author": "dynamder <igaster@163.com>"
+    }
+  }
+}
