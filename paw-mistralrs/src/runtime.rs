@@ -3,7 +3,6 @@ use std::sync::Arc;
 
 use mistralrs::{blocking::BlockingModel, GgufModelBuilder, RequestBuilder, TextMessageRole};
 use paw_core::{Error, PawBundle};
-use tracing::{debug, info};
 
 use crate::config::PawMistralRsConfig;
 use crate::converter::convert_adapter_gguf_to_safetensors;
@@ -63,8 +62,6 @@ impl PawFunction {
 
     /// Run inference on the given input text.
     pub fn run(&self, input: &str, opts: &PawRuntimeOptions) -> Result<String, Error> {
-        debug!("Running inference: input={}", &input[..input.len().min(60)]);
-
         let full_input = format!("{}{}", input, self.suffix_text);
         let full_prompt = format!("{}{}", self.prefix_text, &full_input);
 
@@ -173,8 +170,6 @@ impl PawFnLoader {
             .ok_or_else(|| Error::Other("Invalid GGUF path".into()))?
             .to_path_buf();
 
-        info!("Loading GGUF model via mistral.rs: {}", gguf_path.display());
-
         let rt = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()
@@ -193,7 +188,6 @@ impl PawFnLoader {
             .map_err(|e| Error::Other(format!("mistralrs build: {e}")))?;
 
         let model = BlockingModel::new(async_model, Arc::new(rt));
-        info!("Model loaded successfully via mistral.rs");
         Ok(model)
     }
 
@@ -205,7 +199,6 @@ impl PawFnLoader {
         let lora_dir = bundle.program_dir.join("lora_safetensors");
         convert_adapter_gguf_to_safetensors(&bundle.adapter_path, &lora_dir)?;
 
-        info!("LoRA converted to safetensors at: {:?}", lora_dir);
         self.load_model(bundle)
     }
 
@@ -223,16 +216,6 @@ impl PawFnLoader {
         let mut prefix_cache =
             PrefixCache::new(bundle.program_dir.join("prefix_cache.bin"), &prefix_text);
         let cache_loaded = prefix_cache.try_load().unwrap_or(false);
-
-        if cache_loaded {
-            info!("Prefix cache loaded ({} tokens)", n_prefix);
-        }
-
-        info!(
-            "Loaded program: {} prefix tokens, model={}",
-            n_prefix,
-            bundle.interpreter_model()
-        );
 
         Ok(PawFunction::new(
             model,

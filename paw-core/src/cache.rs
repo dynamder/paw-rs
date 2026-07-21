@@ -2,8 +2,6 @@ use std::collections::HashMap;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
-use tracing::info;
-
 use crate::config::PawConfig;
 use crate::error::{Error, Result};
 use crate::types::{BaseModelInfo, BundleMeta, LocalSdkInfo, RuntimeManifest};
@@ -167,7 +165,6 @@ impl CacheManager {
     pub fn store_gguf(&self, filename: &str, bytes: &[u8]) -> Result<PathBuf> {
         let path = self.gguf_path(filename);
         std::fs::write(&path, bytes).map_err(Error::Io)?;
-        info!("Stored GGUF model at {}", path.display());
         Ok(path)
     }
 
@@ -226,10 +223,6 @@ impl CacheManager {
             )));
         }
 
-        info!(
-            "Extracted program {program_id} to {}",
-            program_dir.display()
-        );
         Ok(program_dir)
     }
 

@@ -111,12 +111,5 @@ pub fn convert_adapter_gguf_to_safetensors(
     std::fs::write(output_dir.join("adapter_config.json"), config_json)
         .map_err(|e| Error::Other(format!("write config: {e}")))?;
 
-    tracing::info!(
-        "Converted GGUF LoRA to safetensors: {} tensors, rank={}, alpha={}",
-        tensors.len(),
-        rank_val,
-        alpha_val,
-    );
-
     Ok(())
 }

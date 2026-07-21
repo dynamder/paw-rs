@@ -140,8 +140,6 @@ impl GgufLoraAdapter {
             }
         }
 
-        tracing::info!("LoRA layers parsed: {} pairs", layers.len());
-
         Ok(Self { layers })
     }
 

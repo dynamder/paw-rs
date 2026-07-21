@@ -4,7 +4,6 @@ use std::sync::{Arc, Mutex};
 use candle_core::{Device, Tensor};
 use candle_nn::ops::softmax;
 use paw_core::{Error, PawBundle, PawFnTrait, PawRuntimeOptions};
-use tracing::{debug, info};
 
 use crate::config::{DevicePreference, PawCandleConfig};
 use crate::kv_cache::PrefixKvCache;
@@ -107,7 +106,6 @@ impl PawFunction {
 
     /// Run inference on the given input text.
     pub fn run(&mut self, input: &str, opts: &PawRuntimeOptions) -> Result<String, Error> {
-        debug!("Running inference: input={}", &input[..input.len().min(60)]);
 
         let full_input = format!("{}{}", input, self.suffix_text);
 
@@ -372,12 +370,13 @@ impl PawFnLoader {
             let m = model.lock().unwrap();
             (m.num_layers(), m.head_dim(), m.num_kv_heads())
         };
-        let lora = GgufLoraAdapter::from_gguf_file(&bundle.adapter_path, &device).ok();
-        if let Some(ref lora) = lora {
+        let lora = GgufLoraAdapter::from_gguf_file(&bundle.adapter_path, &device)
+            .map_err(|e| Error::Other(format!("LoRA adapter load failed: {e}")))?;
+        {
             let mut m = model.lock().unwrap();
-            let matched = m.set_lora(lora);
-            tracing::info!("LoRA applied: {matched} weight matrices matched (side-path, weights stay quantized)");
+            m.set_lora(&lora);
         }
+        let lora = Some(lora);
         let (prefix_text, suffix_text) = bundle.split_template();
 
         let placeholder = "x";
@@ -404,14 +403,9 @@ impl PawFnLoader {
                 let mut m = model.lock().unwrap();
                 m.set_prefix_cache(cached);
             }
-            info!("Prefix KV cache loaded ({} tokens)", n_prefix);
         }
 
         let interpreter = bundle.interpreter_model().to_string();
-        info!(
-            "Loaded program: {} prefix tokens, model={interpreter}",
-            n_prefix,
-        );
 
         let eos_token_id = tokenizer.eos_token_id();
 
@@ -477,7 +471,6 @@ pub async fn ensure_assets(
     // GGUF
     let gguf_path = config.base_models_dir().join(file);
     if !gguf_path.exists() {
-        info!("downloading GGUF {repo}/{file}...");
         let cached = hf
             .model(repo, "")
             .download_file()
@@ -489,13 +482,11 @@ pub async fn ensure_assets(
             std::fs::create_dir_all(p).map_err(paw_core::Error::Io)?;
         }
         std::fs::copy(&cached, &gguf_path).map_err(paw_core::Error::Io)?;
-        info!("GGUF cached to {}", gguf_path.display());
     }
 
     // Tokenizer
     let tok_path = program_dir.join("tokenizer.json");
     if !tok_path.exists() {
-        info!("downloading tokenizer {tok_owner}/{tok_model}/tokenizer.json...");
         let cached = hf
             .model(tok_owner, tok_model)
             .download_file()
@@ -504,7 +495,6 @@ pub async fn ensure_assets(
             .await
             .map_err(|e| paw_core::Error::Other(format!("hf-hub tokenizer: {e}")))?;
         std::fs::copy(&cached, &tok_path).map_err(paw_core::Error::Io)?;
-        info!("tokenizer cached to {}", tok_path.display());
     }
 
     Ok(())

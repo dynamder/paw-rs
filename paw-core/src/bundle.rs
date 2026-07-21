@@ -1,8 +1,6 @@
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
-use tracing::info;
-
 use crate::cache::known_models;
 use crate::error::{Error, Result};
 use crate::types::BundleMeta;
@@ -50,7 +48,6 @@ impl PawBundle {
             return Err(Error::MissingFile(format!("adapter.gguf not in {dir:?}")));
         }
 
-        info!("Loaded program bundle from {}", dir.display());
         Ok(Self {
             program_dir: dir,
             meta,
@@ -88,7 +85,6 @@ impl PawBundle {
         }
 
         let bundle = Self::load_from_dir(&dir)?;
-        info!("Extracted .paw bundle to {}", dir.display());
         Ok(bundle)
     }
 

@@ -2,8 +2,8 @@ use std::cell::RefCell;
 use std::num::NonZeroU32;
 use std::path::PathBuf;
 
-use llama_cpp_2::context::LlamaContext;
 use llama_cpp_2::context::params::LlamaContextParams;
+use llama_cpp_2::context::LlamaContext;
 use llama_cpp_2::llama_backend::LlamaBackend;
 use llama_cpp_2::llama_batch::LlamaBatch;
 use llama_cpp_2::model::params::LlamaModelParams;
@@ -11,7 +11,6 @@ use llama_cpp_2::model::{AddBos, LlamaLoraAdapter, LlamaModel};
 use llama_cpp_2::sampling::LlamaSampler;
 use llama_cpp_2::token::LlamaToken;
 use paw_core::{Error, PawBundle, PawFnTrait, PawRuntimeOptions};
-use tracing::info;
 
 use crate::config::PawLlamaCppConfig;
 
@@ -233,17 +232,11 @@ impl PawFnLoader {
         //info!("Model loaded ({} params)", model.n_params());
 
         let adapter = if bundle.adapter_path.exists() {
-            //info!("Loading LoRA adapter: {}", bundle.adapter_path.display());
-            match model.lora_adapter_init(&bundle.adapter_path) {
-                Ok(a) => {
-                    //info!("LoRA adapter loaded");
-                    Some(a)
-                }
-                Err(e) => {
-                    tracing::warn!("LoRA adapter load failed: {e}");
-                    None
-                }
-            }
+            Some(
+                model
+                    .lora_adapter_init(&bundle.adapter_path)
+                    .map_err(|e| Error::Other(format!("LoRA adapter load failed: {e}")))?,
+            )
         } else {
             None
         };

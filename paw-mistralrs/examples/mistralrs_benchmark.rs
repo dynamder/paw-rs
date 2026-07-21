@@ -4,8 +4,6 @@ use paw_core::PawConfig;
 use paw_mistralrs::{PawMistralRsConfig, PawFnLoader, PawRuntimeOptions};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    tracing_subscriber::fmt::init();
-
     let config = PawConfig::from_env();
     let paw_config = PawMistralRsConfig::builder()
         .core(config)

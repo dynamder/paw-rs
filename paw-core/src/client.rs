@@ -4,7 +4,6 @@ use std::time::Duration;
 use reqwest::header::{HeaderMap, HeaderValue, CONTENT_TYPE};
 use reqwest::StatusCode;
 use serde::de::DeserializeOwned;
-use tracing::{debug, info, warn};
 
 use crate::cache::CacheManager;
 use crate::config::PawConfig;
@@ -236,7 +235,6 @@ impl PawClient {
     /// Compile a spec on the PAW server. Returns a [`Program`] with `id`, `slug`, `status`.
     pub async fn compile(&self, request: CompileRequest) -> Result<Program> {
         let url = api_url(&self.api_url, "/api/v1/compile");
-        debug!("POST {url} with spec ({} chars)", request.spec.len());
 
         let mut body = serde_json::json!({
             "spec": request.spec,
@@ -275,7 +273,6 @@ impl PawClient {
     /// Resolve a slug (e.g. `"email-triage"`) to a program ID.
     pub async fn resolve_slug(&self, slug: &str) -> Result<String> {
         let url = api_url(&self.api_url, &format!("/api/v1/programs/resolve/{slug}"));
-        debug!("GET {url}");
         let data: SlugResolveResponse = api_get(&self.http, &url, self.ak()).await?;
         Ok(data.program_id)
     }
@@ -292,18 +289,13 @@ impl PawClient {
         let raw = self.raw();
 
         if let Some(dir) = raw.cache().get(program_id) {
-            info!("Program {program_id} already cached");
             return Ok(dir);
         }
 
         let bytes = raw.fetch_paw_bytes(program_id).await?;
         let program_dir = raw.cache().store(program_id, &bytes)?;
-        raw.hydrate_runtime_manifest(&program_dir).await;
+        raw.hydrate_runtime_manifest(&program_dir).await?;
 
-        info!(
-            "Program {program_id} ready at {path}",
-            path = program_dir.display()
-        );
         Ok(program_dir)
     }
 
@@ -401,7 +393,6 @@ impl<'a> RawPawClient<'a> {
     /// Pure HTTP: polls with 202/404 retry, returns raw bytes.
     /// No cache check, no file writing.
     pub async fn fetch_paw_bytes(&self, program_id: &str) -> Result<Vec<u8>> {
-        info!("Downloading program {program_id}");
         let max_wait: u64 = 60;
         let mut elapsed: u64 = 0;
         let mut waiting_logged = false;
@@ -418,7 +409,6 @@ impl<'a> RawPawClient<'a> {
             match resp.status() {
                 StatusCode::ACCEPTED => {
                     if !waiting_logged {
-                        info!("Waiting for program {program_id} to be ready...");
                         waiting_logged = true;
                     }
                     let retry_after = resp
@@ -443,7 +433,6 @@ impl<'a> RawPawClient<'a> {
                     }
                     if elapsed < max_wait - 3 {
                         if !waiting_logged {
-                            info!("Waiting for program {program_id} to be ready...");
                             waiting_logged = true;
                         }
                         tokio::time::sleep(Duration::from_secs(3)).await;
@@ -484,17 +473,12 @@ impl<'a> RawPawClient<'a> {
     ///
     /// Reads the program's `meta.json`, fetches the runtime manifest if
     /// needed (checking cache first, then HTTP), and writes it back.
-    pub async fn hydrate_runtime_manifest(&self, program_dir: &Path) {
+    pub async fn hydrate_runtime_manifest(&self, program_dir: &Path) -> Result<()> {
         let meta_path = program_dir.join("meta.json");
-        let meta_content = match std::fs::read_to_string(&meta_path) {
-            Ok(c) => c,
-            Err(_) => return,
-        };
+        let meta_content = std::fs::read_to_string(&meta_path)
+            .map_err(|e| Error::Other(format!("read meta.json: {e}")))?;
 
-        let meta: BundleMeta = match serde_json::from_str(&meta_content) {
-            Ok(m) => m,
-            Err(_) => return,
-        };
+        let meta: BundleMeta = serde_json::from_str(&meta_content)?;
 
         if meta.runtime.as_ref().is_some_and(|r| {
             r.local_sdk
@@ -502,13 +486,13 @@ impl<'a> RawPawClient<'a> {
                 .and_then(|s| s.base_model.as_ref())
                 .is_some()
         }) {
-            return;
+            return Ok(());
         }
 
-        let runtime_id = match meta.runtime_id.as_deref() {
-            Some(id) => id,
-            None => return,
-        };
+        let runtime_id = meta
+            .runtime_id
+            .as_deref()
+            .ok_or_else(|| Error::Other("no runtime_id in meta.json".to_string()))?;
 
         let manifest = self
             .cache
@@ -516,18 +500,13 @@ impl<'a> RawPawClient<'a> {
             .or_else(|| {
                 let rt = tokio::runtime::Runtime::new().ok()?;
                 rt.block_on(self.fetch_runtime_manifest(runtime_id)).ok()
-            });
+            })
+            .ok_or_else(|| Error::Other(format!("failed to resolve runtime manifest for {runtime_id}")))?;
 
-        let manifest = match manifest {
-            Some(m) => m,
-            None => {
-                warn!("Failed to resolve runtime manifest for {runtime_id}");
-                return;
-            }
-        };
+        self.cache
+            .hydrate_manifest(program_dir, &manifest)
+            .map_err(|e| Error::Other(format!("failed to write hydrated manifest: {e}")))?;
 
-        if self.cache.hydrate_manifest(program_dir, &manifest).is_err() {
-            warn!("Failed to write hydrated manifest");
-        }
+        Ok(())
     }
 }
