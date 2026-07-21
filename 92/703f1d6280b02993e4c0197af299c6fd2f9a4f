@@ -1,0 +1,19 @@
+Cargo.toml
+  s_cf1244a8d3b969::t_eb606bc6a72ebc 6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "92703f1d6280b02993e4c0197af299c6fd2f9a4f",
+  "prompts": {},
+  "sessions": {
+    "s_cf1244a8d3b969": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_07c718024ffedMUsrYE3ZM4b7D",
+        "model": "unknown"
+      },
+      "human_author": "dynamder <igaster@163.com>"
+    }
+  }
+}
