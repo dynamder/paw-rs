@@ -1,4 +1,4 @@
-use paw_core::{Backend, Error, InterpreterModel, PawFnTrait, PawConfig};
+use paw_core::{Backend, Error, InterpreterModel, PawConfig, PawFnTrait};
 
 pub struct LlamaCppBackend;
 
@@ -6,7 +6,7 @@ impl Backend for LlamaCppBackend {
     type SharedModel = ();
 
     fn load_from_dir(dir: std::path::PathBuf) -> Result<Box<dyn PawFnTrait>, Error> {
-        use crate::{PawLlamaCppConfig, PawFnLoader};
+        use crate::{PawFnLoader, PawLlamaCppConfig};
         let loader = PawFnLoader::new(dir)
             .config(PawLlamaCppConfig::default())
             .load()?;

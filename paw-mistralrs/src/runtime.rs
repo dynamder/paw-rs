@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use mistralrs::{blocking::BlockingModel, GgufModelBuilder, RequestBuilder, TextMessageRole};
+use mistralrs::{GgufModelBuilder, RequestBuilder, TextMessageRole, blocking::BlockingModel};
 use paw_core::{Error, PawBundle};
 
 use crate::config::PawMistralRsConfig;

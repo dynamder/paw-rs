@@ -42,15 +42,16 @@ async fn main() -> Result<()> {
     println!("[3/4] Loading model...");
     let load_start = Instant::now();
     let candle_config = PawCandleConfig::builder().core(config).build();
-    let mut func = PawFnLoader::new(dir)
-        .config(candle_config)
-        .load()?;
+    let mut func = PawFnLoader::new(dir).config(candle_config).load()?;
     let load_dur = load_start.elapsed();
     println!("  model loaded in {:.2}s", load_dur.as_secs_f64());
 
     // ── 5. Benchmark ───────────────────────────────────────────────────
     let input = "Urgent: your account has been compromised";
-    let opts = PawRuntimeOptions { max_tokens: Some(max_tokens), ..Default::default() };
+    let opts = PawRuntimeOptions {
+        max_tokens: Some(max_tokens),
+        ..Default::default()
+    };
 
     let mut timings: Vec<Duration> = Vec::with_capacity(n_runs);
 
@@ -61,7 +62,11 @@ async fn main() -> Result<()> {
         timings.push(elapsed);
 
         if i < 3 || i == n_runs - 1 {
-            println!("  run {:>2}: {:.1}ms  output: {output:?}", i + 1, elapsed.as_secs_f64() * 1000.0);
+            println!(
+                "  run {:>2}: {:.1}ms  output: {output:?}",
+                i + 1,
+                elapsed.as_secs_f64() * 1000.0
+            );
         }
     }
 
@@ -82,10 +87,19 @@ async fn main() -> Result<()> {
     println!("  Input:      {input:?}");
     println!("  Max tokens: {max_tokens}");
     println!("  Runs:       {n_runs}");
-      println!("  First call (cold): {:.1}ms", first.as_secs_f64() * 1000.0);
-    println!("  Steady avg:       {:.1}ms", steady_avg.as_secs_f64() * 1000.0);
-    println!("  Steady min:       {:.1}ms", steady_min.as_secs_f64() * 1000.0);
-    println!("  Steady max:       {:.1}ms", steady_max.as_secs_f64() * 1000.0);
+    println!("  First call (cold): {:.1}ms", first.as_secs_f64() * 1000.0);
+    println!(
+        "  Steady avg:       {:.1}ms",
+        steady_avg.as_secs_f64() * 1000.0
+    );
+    println!(
+        "  Steady min:       {:.1}ms",
+        steady_min.as_secs_f64() * 1000.0
+    );
+    println!(
+        "  Steady max:       {:.1}ms",
+        steady_max.as_secs_f64() * 1000.0
+    );
     println!("  Overall avg:      {:.1}ms", avg.as_secs_f64() * 1000.0);
 
     Ok(())

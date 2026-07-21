@@ -145,10 +145,10 @@ impl Program {
         let mut label = self.id.clone();
         if let Some(slug) = &self.slug {
             label = slug.clone();
-            if let Some(v) = self.version {
-                if v > 1 {
-                    label.push_str(&format!(" v{v}"));
-                }
+            if let Some(v) = self.version
+                && v > 1
+            {
+                label.push_str(&format!(" v{v}"));
             }
         }
         label

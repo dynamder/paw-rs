@@ -24,15 +24,15 @@
 
 #[cfg(feature = "candle")]
 pub use paw_candle;
+pub use paw_core;
 #[cfg(feature = "llamacpp")]
 pub use paw_llamacpp;
-pub use paw_core;
 
 pub mod function;
 pub mod prelude;
 
-pub use function::PawFnBuilder;
 pub use function::PawFn;
+pub use function::PawFnBuilder;
 
 #[cfg(test)]
 mod tests {
@@ -79,17 +79,13 @@ mod tests {
             .api_url("https://test.example.com")
             .build()
             .unwrap();
-        let b = PawFnBuilder::builder()
-            .config(config)
-            .slug("test");
+        let b = PawFnBuilder::builder().config(config).slug("test");
         let _: PawFnBuilder<function::ForLoad> = b;
     }
 
     #[test]
     fn test_builder_ephemeral_propagates() {
-        let _b = PawFnBuilder::builder()
-            .ephemeral(true)
-            .spec("test");
+        let _b = PawFnBuilder::builder().ephemeral(true).spec("test");
     }
 
     #[test]

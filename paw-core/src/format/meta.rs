@@ -126,10 +126,10 @@ impl PawFileMeta {
         }
 
         if self.has_lora {
-            if let Some(ref lc) = self.lora_config {
-                if lc.rank > 128 {
-                    errors.push(format!("LoRA rank {} > 128", lc.rank));
-                }
+            if let Some(ref lc) = self.lora_config
+                && lc.rank > 128
+            {
+                errors.push(format!("LoRA rank {} > 128", lc.rank));
             }
             let n = tensors.keys().filter(|k| k.starts_with("lora_")).count();
             if n == 0 {

@@ -134,10 +134,10 @@ impl BundleMeta {
 }
 
 fn infer_interpreter(meta: &BundleMeta) -> String {
-    if let Some(ref runtime) = meta.runtime {
-        if !runtime.interpreter.is_empty() {
-            return runtime.interpreter.clone();
-        }
+    if let Some(ref runtime) = meta.runtime
+        && !runtime.interpreter.is_empty()
+    {
+        return runtime.interpreter.clone();
     }
 
     if let Some(ref rid) = meta.runtime_id {

@@ -15,7 +15,10 @@ use clap::{Parser, Subcommand};
 use paw_core::{CompileRequest, PawClient, PawConfig};
 
 #[derive(Debug, Parser)]
-#[command(name = "paw-rs", about = "ProgramAsWeights: compile and run neural programs")]
+#[command(
+    name = "paw-rs",
+    about = "ProgramAsWeights: compile and run neural programs"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -90,23 +93,25 @@ enum Command {
 fn apply_auth_overrides(api_url: Option<&str>, api_key: Option<&str>, verbose: bool) {
     // SAFETY: Setting env vars before any other code runs is safe in single-threaded startup.
     if let Some(url) = api_url {
-        unsafe { std::env::set_var("PAW_API_URL", url); }
+        unsafe {
+            std::env::set_var("PAW_API_URL", url);
+        }
     }
     if let Some(key) = api_key {
-        unsafe { std::env::set_var("PAW_API_KEY", key); }
+        unsafe {
+            std::env::set_var("PAW_API_KEY", key);
+        }
     }
     if verbose {
-        unsafe { std::env::set_var("PAW_VERBOSE", "1"); }
+        unsafe {
+            std::env::set_var("PAW_VERBOSE", "1");
+        }
     }
 }
 
 fn init_tracing(verbose: bool) {
     use tracing_subscriber::prelude::*;
-    let filter = if verbose {
-        "debug"
-    } else {
-        "info"
-    };
+    let filter = if verbose { "debug" } else { "info" };
     let _ = tracing_subscriber::registry()
         .with(tracing_subscriber::fmt::layer().with_writer(std::io::stderr))
         .with(
@@ -131,21 +136,22 @@ async fn main() {
     let json = cli.json;
 
     let result = match &cli.command {
-        Command::Compile { spec, compiler, slug, private } => {
-            cmd_compile(spec, compiler.as_deref(), slug.as_deref(), *private, json).await
-        }
-        Command::Run { program, input, max_tokens, temperature, .. } => {
-            cmd_run(program, input, *max_tokens, *temperature, json).await
-        }
-        Command::Login { key } => {
-            cmd_login(key.as_deref())
-        }
-        Command::Rename { program, new_slug } => {
-            cmd_rename(program, new_slug, json).await
-        }
-        Command::Info { program } => {
-            cmd_info(program, json).await
-        }
+        Command::Compile {
+            spec,
+            compiler,
+            slug,
+            private,
+        } => cmd_compile(spec, compiler.as_deref(), slug.as_deref(), *private, json).await,
+        Command::Run {
+            program,
+            input,
+            max_tokens,
+            temperature,
+            ..
+        } => cmd_run(program, input, *max_tokens, *temperature, json).await,
+        Command::Login { key } => cmd_login(key.as_deref()),
+        Command::Rename { program, new_slug } => cmd_rename(program, new_slug, json).await,
+        Command::Info { program } => cmd_info(program, json).await,
     };
 
     match result {
@@ -159,7 +165,13 @@ async fn main() {
 
 // ── Commands ────────────────────────────────────────────────────────
 
-async fn cmd_compile(spec: &str, compiler: Option<&str>, slug: Option<&str>, private: bool, json: bool) -> Result<i32, paw_core::Error> {
+async fn cmd_compile(
+    spec: &str,
+    compiler: Option<&str>,
+    slug: Option<&str>,
+    private: bool,
+    json: bool,
+) -> Result<i32, paw_core::Error> {
     if !json {
         let preview: String = spec.chars().take(80).collect();
         println!("Compiling: {preview}...");
@@ -211,7 +223,13 @@ async fn cmd_compile(spec: &str, compiler: Option<&str>, slug: Option<&str>, pri
     Ok(0)
 }
 
-async fn cmd_run(program_ref: &str, input: &str, max_tokens: Option<usize>, temperature: Option<f64>, json: bool) -> Result<i32, paw_core::Error> {
+async fn cmd_run(
+    program_ref: &str,
+    input: &str,
+    max_tokens: Option<usize>,
+    temperature: Option<f64>,
+    json: bool,
+) -> Result<i32, paw_core::Error> {
     let config = PawConfig::from_env();
 
     let mut func = paw_rs::PawFnBuilder::builder()
@@ -245,7 +263,10 @@ fn cmd_login(key: Option<&str>) -> Result<i32, paw_core::Error> {
     let key = match key {
         Some(k) => k.to_string(),
         None => {
-            let settings_url = paw_core::config::get_api_url().trim_end_matches('/').to_string() + "/settings";
+            let settings_url = paw_core::config::get_api_url()
+                .trim_end_matches('/')
+                .to_string()
+                + "/settings";
             println!("Generate an API key at {settings_url}");
             if webbrowser::open(&settings_url).is_ok() {
                 println!("Opened browser to {settings_url}");
@@ -333,7 +354,11 @@ async fn cmd_info(program_ref: &str, json: bool) -> Result<i32, paw_core::Error>
             .extra
             .get("aliases")
             .and_then(|v| v.as_array())
-            .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .collect()
+            })
             .unwrap_or_default();
         let hf_url = extra_str(&meta, "hf_url", "");
 
@@ -367,7 +392,12 @@ mod tests {
     fn test_compile_minimal() {
         let cli = Cli::try_parse_from(&["paw-rs", "compile", "--spec", "hello"]).unwrap();
         match &cli.command {
-            Command::Compile { spec, compiler, slug, private } => {
+            Command::Compile {
+                spec,
+                compiler,
+                slug,
+                private,
+            } => {
                 assert_eq!(spec, "hello");
                 assert!(compiler.is_none());
                 assert!(slug.is_none());
@@ -380,14 +410,24 @@ mod tests {
     #[test]
     fn test_compile_all_flags() {
         let cli = Cli::try_parse_from(&[
-            "paw-rs", "compile",
-            "--spec", "classify sentiment",
-            "--compiler", "paw-4b",
-            "--slug", "my-classifier",
+            "paw-rs",
+            "compile",
+            "--spec",
+            "classify sentiment",
+            "--compiler",
+            "paw-4b",
+            "--slug",
+            "my-classifier",
             "--private",
-        ]).unwrap();
+        ])
+        .unwrap();
         match &cli.command {
-            Command::Compile { spec, compiler, slug, private } => {
+            Command::Compile {
+                spec,
+                compiler,
+                slug,
+                private,
+            } => {
                 assert_eq!(spec, "classify sentiment");
                 assert_eq!(compiler.as_deref(), Some("paw-4b"));
                 assert_eq!(slug.as_deref(), Some("my-classifier"));
@@ -408,12 +448,22 @@ mod tests {
     #[test]
     fn test_run_minimal() {
         let cli = Cli::try_parse_from(&[
-            "paw-rs", "run",
-            "--program", "abc123",
-            "--input", "test input",
-        ]).unwrap();
+            "paw-rs",
+            "run",
+            "--program",
+            "abc123",
+            "--input",
+            "test input",
+        ])
+        .unwrap();
         match &cli.command {
-            Command::Run { program, input, max_tokens, temperature, verbose } => {
+            Command::Run {
+                program,
+                input,
+                max_tokens,
+                temperature,
+                verbose,
+            } => {
                 assert_eq!(program, "abc123");
                 assert_eq!(input, "test input");
                 assert!(max_tokens.is_none());
@@ -427,15 +477,27 @@ mod tests {
     #[test]
     fn test_run_all_flags() {
         let cli = Cli::try_parse_from(&[
-            "paw-rs", "run",
-            "--program", "abc123",
-            "--input", "hello",
-            "--max-tokens", "256",
-            "--temperature", "0.5",
+            "paw-rs",
+            "run",
+            "--program",
+            "abc123",
+            "--input",
+            "hello",
+            "--max-tokens",
+            "256",
+            "--temperature",
+            "0.5",
             "--verbose",
-        ]).unwrap();
+        ])
+        .unwrap();
         match &cli.command {
-            Command::Run { program, input, max_tokens, temperature, verbose } => {
+            Command::Run {
+                program,
+                input,
+                max_tokens,
+                temperature,
+                verbose,
+            } => {
                 assert_eq!(program, "abc123");
                 assert_eq!(input, "hello");
                 assert_eq!(*max_tokens, Some(256));
@@ -511,13 +573,21 @@ mod tests {
     #[test]
     fn test_rename_missing_arg_fails() {
         let err = Cli::try_parse_from(&["paw-rs", "rename", "abc123"]).unwrap_err();
-        assert!(err.to_string().contains("requires") || err.to_string().contains("arg"), "error: {err}");
+        assert!(
+            err.to_string().contains("requires") || err.to_string().contains("arg"),
+            "error: {err}"
+        );
     }
 
     #[test]
     fn test_rename_no_args_fails() {
         let err = Cli::try_parse_from(&["paw-rs", "rename"]).unwrap_err();
-        assert!(err.to_string().contains("program") || err.to_string().contains("arg") || err.to_string().contains("requires"), "error: {err}");
+        assert!(
+            err.to_string().contains("program")
+                || err.to_string().contains("arg")
+                || err.to_string().contains("requires"),
+            "error: {err}"
+        );
     }
 
     // ── Info (positional arg) ────────────────────────────────────────
@@ -536,7 +606,10 @@ mod tests {
     #[test]
     fn test_info_missing_arg_fails() {
         let err = Cli::try_parse_from(&["paw-rs", "info"]).unwrap_err();
-        assert!(err.to_string().contains("program") || err.to_string().contains("required"), "error: {err}");
+        assert!(
+            err.to_string().contains("program") || err.to_string().contains("required"),
+            "error: {err}"
+        );
     }
 
     // ── Global flags ─────────────────────────────────────────────────
@@ -553,10 +626,9 @@ mod tests {
 
     #[test]
     fn test_global_json_with_run() {
-        let cli = Cli::try_parse_from(&[
-            "paw-rs", "--json", "run",
-            "--program", "x", "--input", "y",
-        ]).unwrap();
+        let cli =
+            Cli::try_parse_from(&["paw-rs", "--json", "run", "--program", "x", "--input", "y"])
+                .unwrap();
         assert!(cli.json);
         match &cli.command {
             Command::Run { .. } => {}
@@ -573,18 +645,22 @@ mod tests {
     #[test]
     fn test_global_api_url() {
         let cli = Cli::try_parse_from(&[
-            "paw-rs", "--api-url", "https://custom.example.com",
-            "compile", "--spec", "x",
-        ]).unwrap();
+            "paw-rs",
+            "--api-url",
+            "https://custom.example.com",
+            "compile",
+            "--spec",
+            "x",
+        ])
+        .unwrap();
         assert_eq!(cli.api_url.as_deref(), Some("https://custom.example.com"));
     }
 
     #[test]
     fn test_global_api_key() {
-        let cli = Cli::try_parse_from(&[
-            "paw-rs", "--api-key", "sk_test",
-            "compile", "--spec", "x",
-        ]).unwrap();
+        let cli =
+            Cli::try_parse_from(&["paw-rs", "--api-key", "sk_test", "compile", "--spec", "x"])
+                .unwrap();
         assert_eq!(cli.api_key.as_deref(), Some("sk_test"));
     }
 
@@ -592,10 +668,15 @@ mod tests {
     fn test_global_both() {
         let cli = Cli::try_parse_from(&[
             "paw-rs",
-            "--api-url", "https://a.com",
-            "--api-key", "sk_test",
-            "compile", "--spec", "x",
-        ]).unwrap();
+            "--api-url",
+            "https://a.com",
+            "--api-key",
+            "sk_test",
+            "compile",
+            "--spec",
+            "x",
+        ])
+        .unwrap();
         assert_eq!(cli.api_url.as_deref(), Some("https://a.com"));
         assert_eq!(cli.api_key.as_deref(), Some("sk_test"));
     }
@@ -663,6 +744,9 @@ mod tests {
     #[test]
     fn test_no_args_fails() {
         let err = Cli::try_parse_from(&["paw-rs"]).unwrap_err();
-        assert!(err.to_string().contains("subcommand") || err.to_string().contains("Usage"), "error: {err}");
+        assert!(
+            err.to_string().contains("subcommand") || err.to_string().contains("Usage"),
+            "error: {err}"
+        );
     }
 }

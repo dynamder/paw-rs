@@ -2,7 +2,7 @@ use candle_core::quantized::{QMatMul, QTensor};
 use candle_core::{DType, Device, Module, Tensor};
 use std::path::Path;
 
-use super::{fuse_lora_weight, gguf_get, load_gguf_tensors, QuantizedModel};
+use super::{QuantizedModel, fuse_lora_weight, gguf_get, load_gguf_tensors};
 use crate::lora::{GgufLoraAdapter, LoraLayer};
 
 // ── Config ────────────────────────────────────────────────────────────
@@ -81,16 +81,26 @@ impl Gpt2Model {
     /// Detect SIMD support for fast quantized matmul on the current CPU.
     fn is_simd_quantized_available() -> bool {
         #[cfg(target_arch = "x86_64")]
-        { std::is_x86_feature_detected!("avx2") }
+        {
+            std::is_x86_feature_detected!("avx2")
+        }
         #[cfg(target_arch = "aarch64")]
-        { std::is_aarch64_feature_detected!("neon") }
+        {
+            true
+        }
         #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
-        { false }
+        {
+            false
+        }
     }
 
     /// Wrap a QTensor as QMatMul using quantized matmul when `quantized` is true,
     /// otherwise dequantize to f32 and wrap in QMatMul::Tensor (fallback).
-    fn make_qmatmul(qt: QTensor, quantized: bool, device: &Device) -> Result<QMatMul, candle_core::Error> {
+    fn make_qmatmul(
+        qt: QTensor,
+        quantized: bool,
+        device: &Device,
+    ) -> Result<QMatMul, candle_core::Error> {
         if quantized {
             Ok(QMatMul::QTensor(std::sync::Arc::new(qt)))
         } else {
@@ -122,18 +132,34 @@ impl Gpt2Model {
             blocks.push(Gpt2Block {
                 ln_1_weight: take(&format!("{p}attn_norm.weight")).dequantize(device)?,
                 ln_1_bias: take(&format!("{p}attn_norm.bias")).dequantize(device)?,
-                attn_qkv: Self::make_qmatmul(take(&format!("{p}attn_qkv.weight")), use_quantized, device)?,
+                attn_qkv: Self::make_qmatmul(
+                    take(&format!("{p}attn_qkv.weight")),
+                    use_quantized,
+                    device,
+                )?,
                 attn_qkv_bias: take(&format!("{p}attn_qkv.bias")).dequantize(device)?,
                 lora_qkv: None,
                 lora_output: None,
-                attn_out: Self::make_qmatmul(take(&format!("{p}attn_output.weight")), use_quantized, device)?,
+                attn_out: Self::make_qmatmul(
+                    take(&format!("{p}attn_output.weight")),
+                    use_quantized,
+                    device,
+                )?,
                 attn_out_bias: take(&format!("{p}attn_output.bias")).dequantize(device)?,
                 ln_2_weight: take(&format!("{p}ffn_norm.weight")).dequantize(device)?,
                 ln_2_bias: take(&format!("{p}ffn_norm.bias")).dequantize(device)?,
-                mlp_fc: Self::make_qmatmul(take(&format!("{p}ffn_up.weight")), use_quantized, device)?,
+                mlp_fc: Self::make_qmatmul(
+                    take(&format!("{p}ffn_up.weight")),
+                    use_quantized,
+                    device,
+                )?,
                 mlp_fc_bias: take(&format!("{p}ffn_up.bias")).dequantize(device)?,
                 lora_fc: None,
-                mlp_proj: Self::make_qmatmul(take(&format!("{p}ffn_down.weight")), use_quantized, device)?,
+                mlp_proj: Self::make_qmatmul(
+                    take(&format!("{p}ffn_down.weight")),
+                    use_quantized,
+                    device,
+                )?,
                 mlp_proj_bias: take(&format!("{p}ffn_down.bias")).dequantize(device)?,
                 lora_proj: None,
             });
@@ -197,7 +223,11 @@ impl Gpt2Model {
         Ok(mask.unsqueeze(0)?.unsqueeze(0)?)
     }
 
-    fn partial_causal_mask(new_len: usize, total_len: usize, device: &Device) -> Result<Tensor, candle_core::Error> {
+    fn partial_causal_mask(
+        new_len: usize,
+        total_len: usize,
+        device: &Device,
+    ) -> Result<Tensor, candle_core::Error> {
         let cached_len = total_len - new_len;
         let idx_f = Tensor::arange(0f32, total_len as f32, device)?;
         let row_f = Tensor::arange(cached_len as f32, total_len as f32, device)?.unsqueeze(1)?;
@@ -409,7 +439,11 @@ impl QuantizedModel for Gpt2Model {
     }
 
     fn set_prefix_cache(&mut self, prefix: &[(Tensor, Tensor)]) {
-        for (i, pair) in prefix.iter().enumerate().take(self.config.num_hidden_layers) {
+        for (i, pair) in prefix
+            .iter()
+            .enumerate()
+            .take(self.config.num_hidden_layers)
+        {
             self.kv_cache[i] = Some(pair.clone());
         }
     }
@@ -422,16 +456,8 @@ impl QuantizedModel for Gpt2Model {
         for entry in &self.kv_cache {
             match entry {
                 Some((k, v)) => {
-                    let k_prefix = k
-                        .narrow(2, 0, prefix_len)
-                        .ok()?
-                        .contiguous()
-                        .ok()?;
-                    let v_prefix = v
-                        .narrow(2, 0, prefix_len)
-                        .ok()?
-                        .contiguous()
-                        .ok()?;
+                    let k_prefix = k.narrow(2, 0, prefix_len).ok()?.contiguous().ok()?;
+                    let v_prefix = v.narrow(2, 0, prefix_len).ok()?.contiguous().ok()?;
                     result.push((k_prefix, v_prefix));
                 }
                 None => return None,
@@ -485,8 +511,8 @@ mod tests {
     #[tokio::test]
     #[ignore = "downloads ~120MB model + ~1MB adapter on first run"]
     async fn forward_with_lora_changes_output() {
-        use paw_core::prelude::PawConfig;
         use paw_core::PawClient;
+        use paw_core::prelude::PawConfig;
 
         let config = PawConfig::from_env();
         let client = PawClient::new(&config);
@@ -545,7 +571,9 @@ mod tests {
                 .unwrap();
             assert!(last_base != last_lora, "LoRA should change model output");
         } else {
-            eprintln!("LoRA adapter has {matched} matching layers (model expects `blk.{{i}}.attn_qkv`), skipping diff check");
+            eprintln!(
+                "LoRA adapter has {matched} matching layers (model expects `blk.{{i}}.attn_qkv`), skipping diff check"
+            );
         }
     }
 }

@@ -102,15 +102,14 @@ pub mod client;
 pub mod config;
 pub mod error;
 pub mod format;
-pub mod types;
 pub mod prelude;
 pub mod runtime;
-
+pub mod types;
 
 // Re-exports for convenience
 pub use bundle::PawBundle;
 pub use cache::CacheManager;
-pub use client::{PawClient, RawPawClient, CompileRequest, CompileRequestBuilder};
+pub use client::{CompileRequest, CompileRequestBuilder, PawClient, RawPawClient};
 pub use config::PawConfig;
 pub use error::{Error, Result};
 pub use format::{
@@ -168,11 +167,7 @@ pub async fn compile_and_download(
 }
 
 /// Resolve a slug to a program ID, checking local cache first.
-pub async fn resolve(
-    slug: &str,
-    config: &PawConfig,
-    offline: bool,
-) -> Result<String> {
+pub async fn resolve(slug: &str, config: &PawConfig, offline: bool) -> Result<String> {
     let cache = CacheManager::new(config);
 
     if offline {
@@ -354,10 +349,7 @@ mod tests {
 
     #[test]
     fn test_compile_request_builder_minimal() {
-        let req = CompileRequest::builder()
-            .spec("test spec")
-            .build()
-            .unwrap();
+        let req = CompileRequest::builder().spec("test spec").build().unwrap();
         assert_eq!(req.spec, "test spec");
         assert!(req.compiler.is_none());
         assert!(!req.public); // important: default is false
@@ -366,9 +358,17 @@ mod tests {
 
     #[test]
     fn test_compile_request_builder_public_explicit() {
-        let req = CompileRequest::builder().spec("x").public(true).build().unwrap();
+        let req = CompileRequest::builder()
+            .spec("x")
+            .public(true)
+            .build()
+            .unwrap();
         assert!(req.public);
-        let req = CompileRequest::builder().spec("x").public(false).build().unwrap();
+        let req = CompileRequest::builder()
+            .spec("x")
+            .public(false)
+            .build()
+            .unwrap();
         assert!(!req.public);
     }
 
@@ -476,10 +476,7 @@ mod tests {
     #[test]
     fn test_cache_manager_creates_dirs() {
         let tmp = std::env::temp_dir().join("paw_test_cache");
-        let config = PawConfig::builder()
-            .cache_dir(tmp.clone())
-            .build()
-            .unwrap();
+        let config = PawConfig::builder().cache_dir(tmp.clone()).build().unwrap();
         let _cache = CacheManager::new(&config);
         // Verify the cache dirs are computed correctly
         let dirs = [
@@ -506,7 +503,10 @@ mod tests {
         );
         assert_eq!(
             cache::known_models::interpreter_to_gguf("gpt2"),
-            Some((cache::known_models::GPT2_GGUF_REPO, cache::known_models::GPT2_GGUF_FILE))
+            Some((
+                cache::known_models::GPT2_GGUF_REPO,
+                cache::known_models::GPT2_GGUF_FILE
+            ))
         );
         assert_eq!(cache::known_models::interpreter_to_gguf("unknown"), None);
     }
@@ -523,7 +523,10 @@ mod tests {
 
     #[test]
     fn test_error_display_api() {
-        let err = Error::Api { status: 404, message: "Not Found".into() };
+        let err = Error::Api {
+            status: 404,
+            message: "Not Found".into(),
+        };
         assert_eq!(err.to_string(), "API error: 404 — Not Found");
     }
 
@@ -536,7 +539,10 @@ mod tests {
     #[test]
     fn test_error_display_timeout() {
         let err = Error::Timeout(120);
-        assert_eq!(err.to_string(), "Timeout: program assets not ready after 120s");
+        assert_eq!(
+            err.to_string(),
+            "Timeout: program assets not ready after 120s"
+        );
     }
 
     // ── Result alias ──────────────────────────────────────────────────
@@ -544,7 +550,7 @@ mod tests {
     #[test]
     fn test_result_alias_ok() {
         let r: Result<i32> = Ok(42);
-        assert_eq!(r.unwrap(), 42);
+        assert_eq!(r.unwrap_or(-1), 42);
     }
 
     #[test]

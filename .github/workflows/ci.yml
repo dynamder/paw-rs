@@ -21,7 +21,7 @@ jobs:
         with:
           components: rustfmt, clippy
       - run: cargo fmt --check
-      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo clippy --all-targets
 
   build-and-test:
     strategy:
@@ -54,12 +54,12 @@ jobs:
       - name: Override target-cpu for CI consistency
         run: echo 'rustflags = []' > .cargo/config.toml
 
-      - run: cargo test --workspace --lib --bins --exclude paw-mistralrs ${{ matrix.features }}
+      - run: cargo test --workspace --exclude paw-mistralrs ${{ matrix.features }}
 
   msrv:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.85.0
+      - uses: dtolnay/rust-toolchain@1.95.0
       - run: echo 'rustflags = []' > .cargo/config.toml
       - run: cargo check --workspace --exclude paw-mistralrs

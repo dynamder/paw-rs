@@ -8,7 +8,7 @@ use paw_core::{Error, PawBundle, PawFnTrait, PawRuntimeOptions};
 use crate::config::{DevicePreference, PawCandleConfig};
 use crate::kv_cache::PrefixKvCache;
 use crate::lora::GgufLoraAdapter;
-use crate::models::{gpt2::Gpt2Model, qwen3::Qwen3Model, QuantizedModel};
+use crate::models::{QuantizedModel, gpt2::Gpt2Model, qwen3::Qwen3Model};
 use crate::tokenizer::Tokenizer;
 
 // ── PawFunction (inference runtime) ────────────────────────────────────
@@ -106,7 +106,6 @@ impl PawFunction {
 
     /// Run inference on the given input text.
     pub fn run(&mut self, input: &str, opts: &PawRuntimeOptions) -> Result<String, Error> {
-
         let full_input = format!("{}{}", input, self.suffix_text);
 
         let mut model = self.model.lock().unwrap();
@@ -449,8 +448,8 @@ pub async fn ensure_assets(
 ) -> Result<(), paw_core::Error> {
     use paw_core::cache::known_models;
 
-    let hf = hf_hub::HFClient::new()
-        .map_err(|e| paw_core::Error::Other(format!("hf-hub init: {e}")))?;
+    let hf =
+        hf_hub::HFClient::new().map_err(|e| paw_core::Error::Other(format!("hf-hub init: {e}")))?;
 
     let (repo, file, tok_owner, tok_model) = match interpreter {
         "Qwen/Qwen3-0.6B" | "qwen3-0.6b-q6_k" => (

@@ -49,9 +49,11 @@ async fn main() -> Result<()> {
     // ── Binary .paw v2 format roundtrip ────────────────────────────────
     // Create sample tensor data (simulating KV cache layers)
     let mut tensors = HashMap::new();
-    for (k, v) in [sample_tensor("layer_0_key", 2, 4),
-                    sample_tensor("layer_0_value", 2, 4),
-                    sample_tensor("lora_blk.0.attn_q.lora_a", 4, 2)] {
+    for (k, v) in [
+        sample_tensor("layer_0_key", 2, 4),
+        sample_tensor("layer_0_value", 2, 4),
+        sample_tensor("lora_blk.0.attn_q.lora_a", 4, 2),
+    ] {
         tensors.insert(k, v);
     }
 

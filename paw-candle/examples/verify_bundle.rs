@@ -7,9 +7,9 @@
 use candle_core::{Device, Tensor};
 use hf_hub::HFClient;
 use paw_candle::lora::GgufLoraAdapter;
+use paw_candle::models::QuantizedModel;
 use paw_candle::models::gpt2::Gpt2Model;
 use paw_candle::models::qwen3::Qwen3Model;
-use paw_candle::models::QuantizedModel;
 use paw_core::cache::known_models;
 use paw_core::prelude::*;
 
@@ -25,13 +25,22 @@ async fn main() -> Result<()> {
     let bundle = PawBundle::load_from_dir(&dir)?;
 
     println!("  program_id: {program_id}");
-    println!("  spec: {}", &bundle.meta.spec[..bundle.meta.spec.len().min(80)]);
+    println!(
+        "  spec: {}",
+        &bundle.meta.spec[..bundle.meta.spec.len().min(80)]
+    );
     println!("  interpreter: {}", bundle.interpreter_model());
-    println!("  adapter: {} KB",
-        std::fs::metadata(&bundle.adapter_path).map(|m| m.len() / 1024).unwrap_or(0));
-    println!("  template: {} chars prefix, {} chars suffix",
+    println!(
+        "  adapter: {} KB",
+        std::fs::metadata(&bundle.adapter_path)
+            .map(|m| m.len() / 1024)
+            .unwrap_or(0)
+    );
+    println!(
+        "  template: {} chars prefix, {} chars suffix",
         bundle.split_template().0.len(),
-        bundle.split_template().1.len());
+        bundle.split_template().1.len()
+    );
 
     // ── 2. Load LoRA adapter ────────────────────────────────────────────
     println!("\n[2/5] Loading LoRA adapter...");
@@ -69,18 +78,19 @@ async fn main() -> Result<()> {
         std::fs::copy(&cached, &gguf_path).expect("copy to paw cache");
         println!("  cached to: {}", gguf_path.display());
     } else {
-        println!("\n[3/5] GGUF base model already cached: {}", gguf_path.display());
+        println!(
+            "\n[3/5] GGUF base model already cached: {}",
+            gguf_path.display()
+        );
     }
 
     // ── 4. Load base model and attach LoRA ──────────────────────────────
     println!("\n[4/5] Loading base model and attaching LoRA...");
     let lower = interpreter.to_lowercase();
     let mut model: Box<dyn QuantizedModel> = if lower.contains("qwen") {
-        Box::new(Qwen3Model::from_gguf(&gguf_path, &device)
-            .expect("load Qwen3 model"))
+        Box::new(Qwen3Model::from_gguf(&gguf_path, &device).expect("load Qwen3 model"))
     } else if lower.contains("gpt2") {
-        Box::new(Gpt2Model::from_gguf(&gguf_path, &device)
-            .expect("load GPT-2 model"))
+        Box::new(Gpt2Model::from_gguf(&gguf_path, &device).expect("load GPT-2 model"))
     } else {
         return Err(Error::UnsupportedModel(interpreter.to_string()));
     };
@@ -101,15 +111,23 @@ async fn main() -> Result<()> {
     assert_eq!(dims[0], 1);
     assert_eq!(dims[1], 5);
 
-    let last = logits.squeeze(0).unwrap().get(4).unwrap().to_vec1::<f32>().unwrap();
+    let last = logits
+        .squeeze(0)
+        .unwrap()
+        .get(4)
+        .unwrap()
+        .to_vec1::<f32>()
+        .unwrap();
     let finite = last.iter().filter(|v| v.is_finite()).count();
     println!("  last-token logits: {finite}/{} finite", last.len());
     assert!(finite > last.len() / 2, "most logits should be finite");
 
     let mut indexed: Vec<(usize, f32)> = last.iter().copied().enumerate().collect();
     indexed.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
-    println!("  top-3 predictions: id={}, id={}, id={}",
-        indexed[0].0, indexed[1].0, indexed[2].0);
+    println!(
+        "  top-3 predictions: id={}, id={}, id={}",
+        indexed[0].0, indexed[1].0, indexed[2].0
+    );
 
     println!("\n✓ Full pipeline verified: download → load → LoRA → forward");
     Ok(())

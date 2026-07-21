@@ -9,7 +9,7 @@ pub mod qwen3;
 /// GPT-2 model (simple decoder-only transformer).
 pub mod gpt2;
 
-use candle_core::quantized::{gguf_file, QMatMul};
+use candle_core::quantized::{QMatMul, gguf_file};
 use candle_core::{DType, Device, Tensor};
 use std::path::Path;
 
@@ -66,8 +66,12 @@ pub(crate) fn load_gguf_tensors<P: AsRef<Path>>(
 
     // Load all tensors in parallel using rayon.
     use std::sync::Mutex;
-    let result: Mutex<std::collections::HashMap<String, candle_core::quantized::QTensor, ahash::RandomState>> =
-        Mutex::new(std::collections::HashMap::with_capacity_and_hasher(n, ahash::RandomState::new()));
+    let result: Mutex<
+        std::collections::HashMap<String, candle_core::quantized::QTensor, ahash::RandomState>,
+    > = Mutex::new(std::collections::HashMap::with_capacity_and_hasher(
+        n,
+        ahash::RandomState::new(),
+    ));
     let load_err = Mutex::new(None::<candle_core::Error>);
 
     // Each thread creates its own Cursor from the shared mmap and reads

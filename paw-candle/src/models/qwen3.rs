@@ -2,7 +2,7 @@ use candle_core::quantized::{QMatMul, QTensor};
 use candle_core::{DType, Device, Module, Tensor};
 use std::path::Path;
 
-use super::{fuse_lora_weight, gguf_get, load_gguf_tensors, QuantizedModel};
+use super::{QuantizedModel, fuse_lora_weight, gguf_get, load_gguf_tensors};
 use crate::lora::{GgufLoraAdapter, LoraLayer};
 
 // ── Config (inferred from tensor shapes) ──────────────────────────────
@@ -101,13 +101,13 @@ pub struct Qwen3Block {
 pub struct Qwen3Model {
     config: Qwen3Config,
     device: Device,
-    wte_weight: Tensor,       // dequantized for embedding lookup
-    output_weight: QMatMul,    // quantized lm_head
+    wte_weight: Tensor,     // dequantized for embedding lookup
+    output_weight: QMatMul, // quantized lm_head
     blocks: Vec<Qwen3Block>,
     output_norm: Tensor,
     kv_cache: Vec<Option<(Tensor, Tensor)>>, // per-layer (k, v) after QK-Norm & RoPE
-    rope_cos: Tensor, // precomputed cos: [n_ctx, head_dim/2]
-    rope_sin: Tensor, // precomputed sin: [n_ctx, head_dim/2]
+    rope_cos: Tensor,                        // precomputed cos: [n_ctx, head_dim/2]
+    rope_sin: Tensor,                        // precomputed sin: [n_ctx, head_dim/2]
 }
 
 impl Qwen3Model {
@@ -116,16 +116,26 @@ impl Qwen3Model {
     /// Detect SIMD support for fast quantized matmul on the current CPU.
     fn is_simd_quantized_available() -> bool {
         #[cfg(target_arch = "x86_64")]
-        { std::is_x86_feature_detected!("avx2") }
+        {
+            std::is_x86_feature_detected!("avx2")
+        }
         #[cfg(target_arch = "aarch64")]
-        { std::is_aarch64_feature_detected!("neon") }
+        {
+            true
+        }
         #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
-        { false }
+        {
+            false
+        }
     }
 
     /// Wrap a QTensor as QMatMul using quantized matmul when `quantized` is true,
     /// otherwise dequantize to f32 and wrap in QMatMul::Tensor (fallback).
-    fn make_qmatmul(qt: QTensor, quantized: bool, device: &Device) -> Result<QMatMul, candle_core::Error> {
+    fn make_qmatmul(
+        qt: QTensor,
+        quantized: bool,
+        device: &Device,
+    ) -> Result<QMatMul, candle_core::Error> {
         if quantized {
             Ok(QMatMul::QTensor(std::sync::Arc::new(qt)))
         } else {
@@ -156,16 +166,44 @@ impl Qwen3Model {
             let p = format!("blk.{i}.");
             blocks.push(Qwen3Block {
                 attn_norm: take(&format!("{p}attn_norm.weight")).dequantize(device)?,
-                attn_q: Self::make_qmatmul(take(&format!("{p}attn_q.weight")), use_quantized, device)?,
-                attn_k: Self::make_qmatmul(take(&format!("{p}attn_k.weight")), use_quantized, device)?,
-                attn_v: Self::make_qmatmul(take(&format!("{p}attn_v.weight")), use_quantized, device)?,
+                attn_q: Self::make_qmatmul(
+                    take(&format!("{p}attn_q.weight")),
+                    use_quantized,
+                    device,
+                )?,
+                attn_k: Self::make_qmatmul(
+                    take(&format!("{p}attn_k.weight")),
+                    use_quantized,
+                    device,
+                )?,
+                attn_v: Self::make_qmatmul(
+                    take(&format!("{p}attn_v.weight")),
+                    use_quantized,
+                    device,
+                )?,
                 attn_q_norm: take(&format!("{p}attn_q_norm.weight")).dequantize(device)?,
                 attn_k_norm: take(&format!("{p}attn_k_norm.weight")).dequantize(device)?,
-                attn_out: Self::make_qmatmul(take(&format!("{p}attn_output.weight")), use_quantized, device)?,
+                attn_out: Self::make_qmatmul(
+                    take(&format!("{p}attn_output.weight")),
+                    use_quantized,
+                    device,
+                )?,
                 ffn_norm: take(&format!("{p}ffn_norm.weight")).dequantize(device)?,
-                ffn_gate: Self::make_qmatmul(take(&format!("{p}ffn_gate.weight")), use_quantized, device)?,
-                ffn_up: Self::make_qmatmul(take(&format!("{p}ffn_up.weight")), use_quantized, device)?,
-                ffn_down: Self::make_qmatmul(take(&format!("{p}ffn_down.weight")), use_quantized, device)?,
+                ffn_gate: Self::make_qmatmul(
+                    take(&format!("{p}ffn_gate.weight")),
+                    use_quantized,
+                    device,
+                )?,
+                ffn_up: Self::make_qmatmul(
+                    take(&format!("{p}ffn_up.weight")),
+                    use_quantized,
+                    device,
+                )?,
+                ffn_down: Self::make_qmatmul(
+                    take(&format!("{p}ffn_down.weight")),
+                    use_quantized,
+                    device,
+                )?,
                 lora_q: None,
                 lora_k: None,
                 lora_v: None,
@@ -178,10 +216,15 @@ impl Qwen3Model {
 
         eprintln!(
             "Qwen3 loaded: {} layers, hidden={}, heads={}, kv={}, dim={}, intermediate={}, vocab={}, theta={}, eps={}",
-            config.num_hidden_layers, config.hidden_size,
-            config.num_attention_heads, config.num_key_value_heads,
-            config.head_dim, config.intermediate_size, config.vocab_size,
-            config.rope_theta, config.layer_norm_epsilon,
+            config.num_hidden_layers,
+            config.hidden_size,
+            config.num_attention_heads,
+            config.num_key_value_heads,
+            config.head_dim,
+            config.intermediate_size,
+            config.vocab_size,
+            config.rope_theta,
+            config.layer_norm_epsilon,
         );
 
         let kv_cache = vec![None; config.num_hidden_layers];
@@ -195,8 +238,7 @@ impl Qwen3Model {
             .map(|i| ((-2.0 * i as f32) * theta_ln / config.head_dim as f32).exp())
             .collect();
         let inv_freq_t = Tensor::from_slice(&inv_freq, (1, half), device)?;
-        let positions = Tensor::arange(0f32, n_ctx as f32, device)?
-            .reshape((n_ctx, 1))?;
+        let positions = Tensor::arange(0f32, n_ctx as f32, device)?.reshape((n_ctx, 1))?;
         let angles = positions.matmul(&inv_freq_t)?;
         let rope_cos = angles.cos()?;
         let rope_sin = angles.sin()?;
@@ -217,7 +259,15 @@ impl Qwen3Model {
     fn apply_lora(&mut self, adapter: &GgufLoraAdapter) -> usize {
         let mut count = 0;
         for (i, blk) in self.blocks.iter_mut().enumerate() {
-            for suffix in ["attn_q", "attn_k", "attn_v", "attn_output", "ffn_gate", "ffn_up", "ffn_down"] {
+            for suffix in [
+                "attn_q",
+                "attn_k",
+                "attn_v",
+                "attn_output",
+                "ffn_gate",
+                "ffn_up",
+                "ffn_down",
+            ] {
                 let key = format!("blk.{i}.{suffix}");
                 if let Some(layer) = adapter.layers.get(&key) {
                     match suffix {
@@ -246,7 +296,11 @@ impl Qwen3Model {
     /// Causal mask for partial prefill when prefix KV cache exists.
     /// new_len = number of new input tokens, total_len = cached_len + new_len.
     /// New tokens attend to all cached tokens + causal among themselves.
-    fn partial_causal_mask(new_len: usize, total_len: usize, device: &Device) -> Result<Tensor, candle_core::Error> {
+    fn partial_causal_mask(
+        new_len: usize,
+        total_len: usize,
+        device: &Device,
+    ) -> Result<Tensor, candle_core::Error> {
         let cached_len = total_len - new_len;
         let idx_f = Tensor::arange(0f32, total_len as f32, device)?;
         let row_f = Tensor::arange(cached_len as f32, total_len as f32, device)?.unsqueeze(1)?;
@@ -295,7 +349,11 @@ impl Qwen3Model {
         Ok((rope_emb(q)?, rope_emb(k)?))
     }
 
-    fn gqa_repeat_static(kv: &Tensor, n_q: usize, n_kv: usize) -> Result<Tensor, candle_core::Error> {
+    fn gqa_repeat_static(
+        kv: &Tensor,
+        n_q: usize,
+        n_kv: usize,
+    ) -> Result<Tensor, candle_core::Error> {
         if n_q == n_kv {
             return Ok(kv.clone());
         }
@@ -350,14 +408,32 @@ impl QuantizedModel for Qwen3Model {
             let k = blk.attn_k.forward(&h_ln)?;
             let v = blk.attn_v.forward(&h_ln)?;
 
-            let q = match blk.lora_q { Some(ref l) => (q + l.apply(&h_ln)?)?, None => q };
-            let k = match blk.lora_k { Some(ref l) => (k + l.apply(&h_ln)?)?, None => k };
-            let v = match blk.lora_v { Some(ref l) => (v + l.apply(&h_ln)?)?, None => v };
+            let q = match blk.lora_q {
+                Some(ref l) => (q + l.apply(&h_ln)?)?,
+                None => q,
+            };
+            let k = match blk.lora_k {
+                Some(ref l) => (k + l.apply(&h_ln)?)?,
+                None => k,
+            };
+            let v = match blk.lora_v {
+                Some(ref l) => (v + l.apply(&h_ln)?)?,
+                None => v,
+            };
 
             // Multi-head reshape
-            let q = q.reshape((1, seq_len, n_heads, head_dim))?.transpose(1, 2)?.contiguous()?;
-            let k = k.reshape((1, seq_len, n_kv_heads, head_dim))?.transpose(1, 2)?.contiguous()?;
-            let v = v.reshape((1, seq_len, n_kv_heads, head_dim))?.transpose(1, 2)?.contiguous()?;
+            let q = q
+                .reshape((1, seq_len, n_heads, head_dim))?
+                .transpose(1, 2)?
+                .contiguous()?;
+            let k = k
+                .reshape((1, seq_len, n_kv_heads, head_dim))?
+                .transpose(1, 2)?
+                .contiguous()?;
+            let v = v
+                .reshape((1, seq_len, n_kv_heads, head_dim))?
+                .transpose(1, 2)?
+                .contiguous()?;
 
             // QK-Norm
             let q = self.rms_norm(&q, &blk.attn_q_norm)?;
@@ -372,7 +448,11 @@ impl QuantizedModel for Qwen3Model {
                 mask.as_ref().map(|m| m.clone())
             } else if seq_len > 1 {
                 // Partial prefill: prefix cache exists + batch of new tokens
-                let cached_len = self.kv_cache[i].as_ref().map(|(k, _)| k.dim(2)).unwrap_or(Ok(0)).unwrap_or(0);
+                let cached_len = self.kv_cache[i]
+                    .as_ref()
+                    .map(|(k, _)| k.dim(2))
+                    .unwrap_or(Ok(0))
+                    .unwrap_or(0);
                 let total_seq = cached_len + seq_len;
                 Some(Self::partial_causal_mask(seq_len, total_seq, device)?)
             } else {
@@ -404,7 +484,9 @@ impl QuantizedModel for Qwen3Model {
             };
             let weights = candle_nn::ops::softmax(&scores, candle_core::D::Minus1)?;
             let h_attn = weights.matmul(&v)?;
-            let h_attn = h_attn.transpose(1, 2)?.reshape((1, seq_len, n_heads * head_dim))?;
+            let h_attn = h_attn
+                .transpose(1, 2)?
+                .reshape((1, seq_len, n_heads * head_dim))?;
 
             // Output projection + LoRA
             let attn_delta = match blk.lora_output {
@@ -529,7 +611,11 @@ impl QuantizedModel for Qwen3Model {
     }
 
     fn set_prefix_cache(&mut self, prefix: &[(Tensor, Tensor)]) {
-        for (i, pair) in prefix.iter().enumerate().take(self.config.num_hidden_layers) {
+        for (i, pair) in prefix
+            .iter()
+            .enumerate()
+            .take(self.config.num_hidden_layers)
+        {
             self.kv_cache[i] = Some(pair.clone());
         }
     }
@@ -542,16 +628,8 @@ impl QuantizedModel for Qwen3Model {
         for entry in &self.kv_cache {
             match entry {
                 Some((k, v)) => {
-                    let k_prefix = k
-                        .narrow(2, 0, prefix_len)
-                        .ok()?
-                        .contiguous()
-                        .ok()?;
-                    let v_prefix = v
-                        .narrow(2, 0, prefix_len)
-                        .ok()?
-                        .contiguous()
-                        .ok()?;
+                    let k_prefix = k.narrow(2, 0, prefix_len).ok()?.contiguous().ok()?;
+                    let v_prefix = v.narrow(2, 0, prefix_len).ok()?.contiguous().ok()?;
                     result.push((k_prefix, v_prefix));
                 }
                 None => return None,
@@ -588,7 +666,13 @@ mod tests {
         let logits = model.forward(&input, 0).expect("forward pass");
         assert_eq!(logits.dims(), &[1, 5, 151936]);
 
-        let last = logits.squeeze(0).unwrap().get(4).unwrap().to_vec1::<f32>().unwrap();
+        let last = logits
+            .squeeze(0)
+            .unwrap()
+            .get(4)
+            .unwrap()
+            .to_vec1::<f32>()
+            .unwrap();
         assert!(
             last.iter().filter(|v| v.is_finite()).count() > last.len() / 2,
             "most logits should be finite"

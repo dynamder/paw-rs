@@ -5,7 +5,7 @@ use candle_core::Device;
 use paw_core::{Error, InterpreterModel};
 
 use crate::lora::GgufLoraAdapter;
-use crate::models::{gpt2::Gpt2Model, qwen3::Qwen3Model, QuantizedModel};
+use crate::models::{QuantizedModel, gpt2::Gpt2Model, qwen3::Qwen3Model};
 
 /// Load a GGUF model for the given interpreter type.
 fn load_gguf<T: InterpreterModel>(
@@ -20,7 +20,8 @@ fn load_gguf<T: InterpreterModel>(
     Ok(model)
 }
 
-fn cached_model_lock<T: InterpreterModel>() -> &'static OnceLock<Arc<Mutex<Box<dyn QuantizedModel>>>> {
+fn cached_model_lock<T: InterpreterModel>() -> &'static OnceLock<Arc<Mutex<Box<dyn QuantizedModel>>>>
+{
     static CACHE: OnceLock<Arc<Mutex<Box<dyn QuantizedModel>>>> = OnceLock::new();
     &CACHE
 }
@@ -46,7 +47,7 @@ pub struct CandleBackend;
 impl paw_core::Backend for CandleBackend {
     type SharedModel = ();
     fn load_from_dir(dir: std::path::PathBuf) -> Result<Box<dyn paw_core::PawFnTrait>, Error> {
-        use crate::{runtime::PawFnLoader, PawCandleConfig};
+        use crate::{PawCandleConfig, runtime::PawFnLoader};
         let inner = PawFnLoader::new(dir)
             .config(PawCandleConfig::default())
             .load()?;
@@ -70,7 +71,7 @@ impl paw_core::Backend for CandleBackend {
         dir: std::path::PathBuf,
         _model: Self::SharedModel,
     ) -> Result<Box<dyn paw_core::PawFnTrait>, Error> {
-        use crate::{runtime::PawFnLoader, PawCandleConfig};
+        use crate::{PawCandleConfig, runtime::PawFnLoader};
         let inner = PawFnLoader::new(dir)
             .config(PawCandleConfig::default())
             .load()?;

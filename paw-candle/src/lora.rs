@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use candle_core::{quantized::gguf_file, Device, Tensor};
+use candle_core::{Device, Tensor, quantized::gguf_file};
 use paw_core::Error;
 
 /// A single LoRA layer pair (A, B) for one weight matrix.

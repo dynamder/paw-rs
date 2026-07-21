@@ -1,5 +1,3 @@
-use std::path::Path;
-
 use crate::error::Error;
 
 // ── Runtime options ────────────────────────────────────────────────────
@@ -87,19 +85,29 @@ pub trait Backend: Send + Sync + 'static {
 pub enum Candle {}
 impl Backend for Candle {
     type SharedModel = (); // placeholder
-    fn load_from_dir(dir: std::path::PathBuf) -> Result<Box<dyn PawFnTrait>, Error> {
-        error_no_backend::<Self>("candle")
+    fn load_from_dir(_dir: std::path::PathBuf) -> Result<Box<dyn PawFnTrait>, Error> {
+        error_no_backend("candle")
     }
-    async fn ensure_assets(config: &crate::PawConfig, dir: &std::path::Path, _interpreter: &str) -> Result<(), Error> {
-        let _ = config; let _ = dir;
-        error_no_backend::<Self>("candle")
-    }
-    fn get_or_load_model<T: InterpreterModel>(_config: &crate::PawConfig) -> Result<Self::SharedModel, Error> {
-        error_no_backend::<Self>("candle")
-    }
-    fn load_from_dir_with_model(dir: std::path::PathBuf, _model: Self::SharedModel) -> Result<Box<dyn PawFnTrait>, Error> {
+    async fn ensure_assets(
+        config: &crate::PawConfig,
+        dir: &std::path::Path,
+        _interpreter: &str,
+    ) -> Result<(), Error> {
+        let _ = config;
         let _ = dir;
-        error_no_backend::<Self>("candle")
+        error_no_backend("candle")
+    }
+    fn get_or_load_model<T: InterpreterModel>(
+        _config: &crate::PawConfig,
+    ) -> Result<Self::SharedModel, Error> {
+        error_no_backend("candle")
+    }
+    fn load_from_dir_with_model(
+        dir: std::path::PathBuf,
+        _model: Self::SharedModel,
+    ) -> Result<Box<dyn PawFnTrait>, Error> {
+        let _ = dir;
+        error_no_backend("candle")
     }
 }
 
@@ -108,18 +116,28 @@ impl Backend for LlamaCpp {
     type SharedModel = ();
     fn load_from_dir(dir: std::path::PathBuf) -> Result<Box<dyn PawFnTrait>, Error> {
         let _ = dir;
-        error_no_backend::<Self>("llamacpp")
+        error_no_backend("llamacpp")
     }
-    async fn ensure_assets(config: &crate::PawConfig, dir: &std::path::Path, _interpreter: &str) -> Result<(), Error> {
-        let _ = config; let _ = dir;
-        error_no_backend::<Self>("llamacpp")
-    }
-    fn get_or_load_model<T: InterpreterModel>(_config: &crate::PawConfig) -> Result<Self::SharedModel, Error> {
-        error_no_backend::<Self>("llamacpp")
-    }
-    fn load_from_dir_with_model(dir: std::path::PathBuf, _model: Self::SharedModel) -> Result<Box<dyn PawFnTrait>, Error> {
+    async fn ensure_assets(
+        config: &crate::PawConfig,
+        dir: &std::path::Path,
+        _interpreter: &str,
+    ) -> Result<(), Error> {
+        let _ = config;
         let _ = dir;
-        error_no_backend::<Self>("llamacpp")
+        error_no_backend("llamacpp")
+    }
+    fn get_or_load_model<T: InterpreterModel>(
+        _config: &crate::PawConfig,
+    ) -> Result<Self::SharedModel, Error> {
+        error_no_backend("llamacpp")
+    }
+    fn load_from_dir_with_model(
+        dir: std::path::PathBuf,
+        _model: Self::SharedModel,
+    ) -> Result<Box<dyn PawFnTrait>, Error> {
+        let _ = dir;
+        error_no_backend("llamacpp")
     }
 }
 
@@ -129,17 +147,26 @@ impl Backend for DynamicBackend {
     fn load_from_dir(_dir: std::path::PathBuf) -> Result<Box<dyn PawFnTrait>, Error> {
         Err(Error::Other("no backend selected".into()))
     }
-    async fn ensure_assets(_config: &crate::PawConfig, _dir: &std::path::Path, _interpreter: &str) -> Result<(), Error> {
+    async fn ensure_assets(
+        _config: &crate::PawConfig,
+        _dir: &std::path::Path,
+        _interpreter: &str,
+    ) -> Result<(), Error> {
         Ok(())
     }
-    fn get_or_load_model<T: InterpreterModel>(_config: &crate::PawConfig) -> Result<Self::SharedModel, Error> {
+    fn get_or_load_model<T: InterpreterModel>(
+        _config: &crate::PawConfig,
+    ) -> Result<Self::SharedModel, Error> {
         Err(Error::Other("no backend selected".into()))
     }
-    fn load_from_dir_with_model(_dir: std::path::PathBuf, _model: Self::SharedModel) -> Result<Box<dyn PawFnTrait>, Error> {
+    fn load_from_dir_with_model(
+        _dir: std::path::PathBuf,
+        _model: Self::SharedModel,
+    ) -> Result<Box<dyn PawFnTrait>, Error> {
         Err(Error::Other("no backend selected".into()))
     }
 }
 
-fn error_no_backend<B: Backend>(name: &str) -> ! {
+fn error_no_backend(name: &str) -> ! {
     panic!("Backend `{name}` is not compiled. Add `features = [\"{name}\"]` to paw-rs deps.")
 }

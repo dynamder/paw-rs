@@ -21,7 +21,8 @@ async fn main() -> paw_core::Result<()> {
     let mut b = PawFn::<Qwen3_0_6B>::compile_spec(
         "Classify sentiment: return POSITIVE or NEGATIVE",
         "paw-4b-qwen3-0.6b",
-    ).await?;
+    )
+    .await?;
 
     // Both `a` and `b` share the same Qwen3 base model in memory.
     // The LoRA adapter is swapped per `run()` call — no extra VRAM needed.

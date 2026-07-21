@@ -1,8 +1,8 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use reqwest::header::{HeaderMap, HeaderValue, CONTENT_TYPE};
 use reqwest::StatusCode;
+use reqwest::header::{CONTENT_TYPE, HeaderMap, HeaderValue};
 use serde::de::DeserializeOwned;
 
 use crate::cache::CacheManager;
@@ -33,10 +33,10 @@ fn strip_nulls(v: serde_json::Value) -> serde_json::Value {
 fn build_headers(api_key: Option<&str>) -> HeaderMap {
     let mut headers = HeaderMap::new();
     headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
-    if let Some(key) = api_key {
-        if let Ok(val) = HeaderValue::from_str(key) {
-            headers.insert("X-API-Key", val);
-        }
+    if let Some(key) = api_key
+        && let Ok(val) = HeaderValue::from_str(key)
+    {
+        headers.insert("X-API-Key", val);
     }
     headers
 }
@@ -401,7 +401,7 @@ impl<'a> RawPawClient<'a> {
         let resp = loop {
             let resp = self
                 .http
-                .get(&url(program_id))
+                .get(url(program_id))
                 .headers(build_headers(self.api_key))
                 .send()
                 .await?;
@@ -501,7 +501,11 @@ impl<'a> RawPawClient<'a> {
                 let rt = tokio::runtime::Runtime::new().ok()?;
                 rt.block_on(self.fetch_runtime_manifest(runtime_id)).ok()
             })
-            .ok_or_else(|| Error::Other(format!("failed to resolve runtime manifest for {runtime_id}")))?;
+            .ok_or_else(|| {
+                Error::Other(format!(
+                    "failed to resolve runtime manifest for {runtime_id}"
+                ))
+            })?;
 
         self.cache
             .hydrate_manifest(program_dir, &manifest)
