@@ -1,0 +1,41 @@
+paw-candle/src/models/qwen3.rs
+  s_3f43af9deaeb80::t_912ff8d38e1777 217-218
+paw-candle/Cargo.toml
+  s_3f43af9deaeb80::t_7a08c23ae1d4a2 14
+  s_3f43af9deaeb80::t_8df65c2cc08da9 35
+paw-llamacpp/src/runtime.rs
+  s_3f43af9deaeb80::t_5754339d2fc357 223
+  s_3f43af9deaeb80::t_4a596412751f32 224-229
+paw-rs/Cargo.toml
+  s_3f43af9deaeb80::t_2768fb4c43e27b 43-46
+paw-core/src/lib.rs
+  s_3f43af9deaeb80::t_3c4382b1fb1efc 197
+paw-llamacpp/Cargo.toml
+  s_3f43af9deaeb80::t_29bca6654711dd 14
+Cargo.lock
+  s_49ae7ceabb4fd4::t_848b1f9a339529 4475,4491,4496,4511,4521,4537
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "4afcf2fbfb3768e151a3c5b7766920cca8dce1a2",
+  "prompts": {},
+  "sessions": {
+    "s_3f43af9deaeb80": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_07a762834ffeiAV7wAap9KL7pa",
+        "model": "unknown"
+      },
+      "human_author": "dynamder <igaster@163.com>"
+    },
+    "s_49ae7ceabb4fd4": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_082221e4bffeWZAa8KbyXkAEhd",
+        "model": "unknown"
+      },
+      "human_author": "dynamder <igaster@163.com>"
+    }
+  }
+}
