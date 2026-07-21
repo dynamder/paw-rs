@@ -1,0 +1,84 @@
+.github/workflows/ci.yml
+  s_cf1244a8d3b969::t_f32f3b129f6495 57
+  s_cf1244a8d3b969::t_3a08f2fbc0d84e 24
+paw-candle/src/models/qwen3.rs
+  s_cf1244a8d3b969::t_e912b992bda430 123
+  s_cf1244a8d3b969::t_9a314eef05371b 5,104-105,109-110,119-121,124-125,127-129,134-138,169-183,186-190,192-206,219-227,241,262-270,299-303,352-356,411-422,425-436,451-455,487-489,614-618,631-632,669-675
+paw-core/src/bundle.rs
+  s_cf1244a8d3b969::t_530760254be260 137-140
+paw-core/src/types.rs
+  s_cf1244a8d3b969::t_85002e9d8113b3 148-151
+paw-core/src/format/meta.rs
+  s_cf1244a8d3b969::t_bf655d53490c20 129-132
+paw-core/src/runtime.rs
+  s_cf1244a8d3b969::t_7c0bb6b1091a54 89,98,103,110
+  s_cf1244a8d3b969::t_e61ca972a0ef01 119,128,130-133,135-138,140
+  s_cf1244a8d3b969::t_e4e46d4e715c3f 170
+  s_cf1244a8d3b969::t_e4cc1751e0703b 88
+  s_cf1244a8d3b969::t_2c8055bc25edcf 95-97
+  s_cf1244a8d3b969::t_6aad5ffa0c403a 100-102
+  s_cf1244a8d3b969::t_f8e0737173b71a 125-127
+paw-core/src/lib.rs
+  s_cf1244a8d3b969::t_c558373a0164cb 553
+paw-candle/src/models/gpt2.rs
+  s_cf1244a8d3b969::t_9ae9730433aa6e 88
+  s_cf1244a8d3b969::t_fd504507126506 5,84-86,89-90,92-94,99-103,135-139,143-147,151-155,158-162,226-230,442-446,459-460,515,574-576
+paw-core/src/client.rs
+  s_cf1244a8d3b969::t_388b4203729f6a 404
+paw-candle/examples/gpt2_benchmark.rs
+  s_cf1244a8d3b969::t_b76a539354b396 2,6-11,30-33,42-46
+paw-candle/examples/gpt2_inference.rs
+  s_cf1244a8d3b969::t_2c5a0cf9e4be0c 9,54-59,67-68,72-75
+paw-candle/examples/qwen3_benchmark.rs
+  s_cf1244a8d3b969::t_15593830a61a97 45,51-54,65-69,90-102
+paw-candle/examples/qwen3_inference.rs
+  s_cf1244a8d3b969::t_7d0fe517065e93 18-22,25-27,29-34,36-38,60-67,72-79,84,88-91
+paw-candle/examples/verify_bundle.rs
+  s_cf1244a8d3b969::t_c95822c3534bc3 10,28-31,33-40,42-43,81-84,91,93,114-120,127-130
+paw-candle/src/interpreter.rs
+  s_cf1244a8d3b969::t_2117a0a689dbfa 8,23-24,50,74
+paw-candle/src/lib.rs
+  s_cf1244a8d3b969::t_8cfffeaa3df500 40,50,54,65-66
+paw-candle/src/lora.rs
+  s_cf1244a8d3b969::t_24720e3d7bc343 10
+paw-candle/src/models.rs
+  s_cf1244a8d3b969::t_7105384f155f69 12,69-74
+paw-candle/src/runtime.rs
+  s_cf1244a8d3b969::t_c8bdff52e47f8b 11,451-452
+paw-core/examples/download_and_save.rs
+  s_cf1244a8d3b969::t_df0b817cd06d76 52-56
+paw-llamacpp/examples/llamacpp_benchmark.rs
+  s_cf1244a8d3b969::t_d65588b6408ec5 4,37-45,52-61,66-70,83-94,103-110
+paw-llamacpp/src/backend.rs
+  s_cf1244a8d3b969::t_98f77ff9cfe0a8 1,9
+paw-llamacpp/src/runtime.rs
+  s_cf1244a8d3b969::t_699e6bf5c77e62 6
+paw-mistralrs/examples/mistralrs_benchmark.rs
+  s_cf1244a8d3b969::t_844a27f6f798df 4,8,33-40,47-54,59-63,76-87
+paw-mistralrs/src/lib.rs
+  s_cf1244a8d3b969::t_3b32850ee2caba 1
+paw-mistralrs/src/runtime.rs
+  s_cf1244a8d3b969::t_11aac13d688b3e 4
+paw-rs/examples/typed_api.rs
+  s_cf1244a8d3b969::t_55b184feebfd1f 24-25
+paw-rs/src/bin/paw-rs.rs
+  s_cf1244a8d3b969::t_6f42aa1bb4e09d 18-21,96-98,101-103,106-108,114,139-154,168-174,226-232,266-269,357-361,395-400,413-420,422-423,425-430,451-458,460-466,480-489,491-492,494-500,576-579,585-590,609-612,629-631,648-655,661-663,671-679,747-750
+paw-rs/src/lib.rs
+  s_cf1244a8d3b969::t_3d9b7a0cefa20c 27,35,82,88
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "26c689fbe2372d715ce25968c3b32e1f82ba92a2",
+  "prompts": {},
+  "sessions": {
+    "s_cf1244a8d3b969": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_07c718024ffedMUsrYE3ZM4b7D",
+        "model": "unknown"
+      },
+      "human_author": "dynamder <igaster@163.com>"
+    }
+  }
+}
