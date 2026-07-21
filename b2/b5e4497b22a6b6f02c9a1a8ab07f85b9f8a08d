@@ -1,0 +1,31 @@
+.github/workflows/ci.yml
+  s_cf1244a8d3b969::t_e66518ba156744 65
+  s_cf1244a8d3b969::t_445d02769b5cee 57
+paw-rs/src/function.rs
+  s_cf1244a8d3b969::t_ef37c9a0e21687 32
+  s_49ae7ceabb4fd4::t_851a8c1d84df77 201,224-226
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "b2b5e4497b22a6b6f02c9a1a8ab07f85b9f8a08d",
+  "prompts": {},
+  "sessions": {
+    "s_49ae7ceabb4fd4": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_082221e4bffeWZAa8KbyXkAEhd",
+        "model": "unknown"
+      },
+      "human_author": "dynamder <igaster@163.com>"
+    },
+    "s_cf1244a8d3b969": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_07c718024ffedMUsrYE3ZM4b7D",
+        "model": "unknown"
+      },
+      "human_author": "dynamder <igaster@163.com>"
+    }
+  }
+}
