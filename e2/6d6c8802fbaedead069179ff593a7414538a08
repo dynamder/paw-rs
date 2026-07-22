@@ -1,0 +1,46 @@
+paw-candle/src/lib.rs
+  s_4eb2e7248b434e::t_f923bfe62af47a 43
+  s_4eb2e7248b434e::t_59d88849ffa3a8 51
+paw-candle/src/pool.rs
+  s_4eb2e7248b434e::t_d33f235a2bafd8 1-16,18-22,27,29-120
+  s_4eb2e7248b434e::t_64cb85572760e4 17
+  s_4eb2e7248b434e::t_48ef873700dc8a 23-26
+  s_4eb2e7248b434e::t_1897b134de8694 28
+paw-candle/src/config.rs
+  s_4eb2e7248b434e::t_9c89a45a91b4f4 46-47
+  s_4eb2e7248b434e::t_e6f9ac378b965f 98
+  s_4eb2e7248b434e::t_c00ab5b6845310 136-141,152
+  s_4eb2e7248b434e::t_7dbaedacd74059 58
+paw-candle/src/interpreter.rs
+  s_4eb2e7248b434e::t_9cb691e894659b 8,23-25,33-34,42,50,55-68,70,73,78
+  s_4eb2e7248b434e::t_c9cfe0bfebe7aa 2
+paw-candle/src/runtime.rs
+  s_4eb2e7248b434e::t_c9796bd5800bd4 330-332
+  s_4eb2e7248b434e::t_57d9d46ca2ff0f 335-339
+  s_4eb2e7248b434e::t_a640d48f0df315 432
+  s_4eb2e7248b434e::t_4a26b88c6cc460 12
+  s_4eb2e7248b434e::t_a9b305c4680132 343
+  s_4eb2e7248b434e::t_48e189970c6716 78,92
+  s_4eb2e7248b434e::t_08a1e31e2b5d95 333
+  s_4eb2e7248b434e::t_a8888951e5c57d 113
+  s_4eb2e7248b434e::t_050d1da26aa5ab 600-637
+  s_4eb2e7248b434e::t_61fbe2146e48d4 379
+  s_4eb2e7248b434e::t_cdfd64b88d97d3 22
+  s_4eb2e7248b434e::t_698c6ce625d6cf 328-329,334,340-341,349,354
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "e26d6c8802fbaedead069179ff593a7414538a08",
+  "prompts": {},
+  "sessions": {
+    "s_4eb2e7248b434e": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_07715fba2ffeBua2dQCmkaVLwF",
+        "model": "unknown"
+      },
+      "human_author": "dynamder <igaster@163.com>"
+    }
+  }
+}
