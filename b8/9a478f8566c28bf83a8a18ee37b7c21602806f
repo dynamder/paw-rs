@@ -1,0 +1,33 @@
+paw-candle/src/pool.rs
+  s_4eb2e7248b434e::t_6fdd7b41003b74 10-14
+  s_4eb2e7248b434e::t_d5c136ab5387a2 19-20
+paw-candle/src/runtime.rs
+  s_4eb2e7248b434e::t_80607f18c7c68e 22-25
+README.en.md
+  s_4eb2e7248b434e::t_35895ba688b95e 62,64,68,105-125,127,129-136,145,165-166,171-178,186-187,199,201-204,217-219
+README.md
+  s_4eb2e7248b434e::t_d9cdaed0cefef1 62,64,68,105-137,145,165-166,171-178,186-187,199,201-204,217-219
+paw-candle/examples/verify_pool.rs
+  s_4eb2e7248b434e::t_2752088364ae70 1-2
+  s_4eb2e7248b434e::t_53c06e331a9f87 3-92
+paw-llamacpp/src/lib.rs
+  s_4eb2e7248b434e::t_68717e9e2e4d09 1-68
+paw-candle/src/lib.rs
+  s_4eb2e7248b434e::t_7bc7cfbbe1324b 7-20,41-51,53-60,62-69
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "b89a478f8566c28bf83a8a18ee37b7c21602806f",
+  "prompts": {},
+  "sessions": {
+    "s_4eb2e7248b434e": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_07715fba2ffeBua2dQCmkaVLwF",
+        "model": "unknown"
+      },
+      "human_author": "dynamder <igaster@163.com>"
+    }
+  }
+}
