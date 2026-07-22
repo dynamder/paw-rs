@@ -90,11 +90,11 @@ impl Backend for LlamaCppBackend {
         dir: PathBuf,
         handle: Self::SharedModel,
     ) -> Result<Box<dyn PawFnTrait>, Error> {
-        use std::cell::RefCell;
-        use std::num::NonZeroU32;
         use llama_cpp_2::context::{LlamaContext, params::LlamaContextParams};
         use llama_cpp_2::model::AddBos;
         use paw_core::PawBundle;
+        use std::cell::RefCell;
+        use std::num::NonZeroU32;
 
         let bundle = PawBundle::load_from_dir(&dir)?;
         let config = PawLlamaCppConfig::default();

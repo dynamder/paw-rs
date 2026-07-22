@@ -114,8 +114,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // ── Test 5: Threaded parallel execution ──
     println!("--- Test 5: Threaded parallel (4 threads, max_model_copies=4) ---");
-    use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
 
     let ready = Arc::new(AtomicBool::new(false));
     let test_input = test_inputs[2].to_string();

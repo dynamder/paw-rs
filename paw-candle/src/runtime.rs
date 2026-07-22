@@ -625,10 +625,9 @@ fn load_model_standalone(
     }
     let lower = model_name.to_lowercase();
     if lower.contains("qwen") {
-        Ok(Box::new(
-            Qwen3Model::from_gguf(gguf_path, device)
-                .map_err(|e| Error::Other(format!("Qwen3 load error: {e}")))?,
-        ))
+        Ok(Box::new(Qwen3Model::from_gguf(gguf_path, device).map_err(
+            |e| Error::Other(format!("Qwen3 load error: {e}")),
+        )?))
     } else if lower.contains("gpt2") {
         Ok(Box::new(Gpt2Model::from_gguf(gguf_path, device).map_err(
             |e| Error::Other(format!("GPT-2 load error: {e}")),
