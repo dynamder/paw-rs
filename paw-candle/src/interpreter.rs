@@ -1,11 +1,11 @@
 use std::path::Path;
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex};
 
 use candle_core::Device;
 use paw_core::{Error, InterpreterModel};
 
-use crate::lora::GgufLoraAdapter;
 use crate::models::{QuantizedModel, gpt2::Gpt2Model, qwen3::Qwen3Model};
+use crate::pool;
 
 /// Load a GGUF model for the given interpreter type.
 fn load_gguf<T: InterpreterModel>(
@@ -20,24 +20,9 @@ fn load_gguf<T: InterpreterModel>(
     Ok(model)
 }
 
-fn cached_model_lock<T: InterpreterModel>() -> &'static OnceLock<Arc<Mutex<Box<dyn QuantizedModel>>>>
-{
-    static CACHE: OnceLock<Arc<Mutex<Box<dyn QuantizedModel>>>> = OnceLock::new();
-    &CACHE
-}
-
-pub fn get_or_load_model<T: InterpreterModel>(
-    config: &paw_core::PawConfig,
-    device: &Device,
-) -> paw_core::Result<Arc<Mutex<Box<dyn QuantizedModel>>>> {
-    let cache = cached_model_lock::<T>();
-    let shared = cache.get_or_init(|| {
-        let gguf_path = config.base_models_dir().join(T::GGUF_FILE);
-        let model = load_gguf::<T>(&gguf_path, device)
-            .unwrap_or_else(|e| panic!("failed to load GGUF model {}: {e}", T::INTERPRETER));
-        Arc::new(Mutex::new(model))
-    });
-    Ok(Arc::clone(shared))
+pub struct SharedModelHandle {
+    pub(crate) model: Arc<Mutex<Box<dyn QuantizedModel>>>,
+    pub(crate) pool: Arc<pool::ModelPool>,
 }
 
 // ── Backend impl for Candle ────────────────────────────────────────────────
@@ -45,7 +30,8 @@ pub fn get_or_load_model<T: InterpreterModel>(
 pub struct CandleBackend;
 
 impl paw_core::Backend for CandleBackend {
-    type SharedModel = ();
+    type SharedModel = SharedModelHandle;
+
     fn load_from_dir(dir: std::path::PathBuf) -> Result<Box<dyn paw_core::PawFnTrait>, Error> {
         use crate::{PawCandleConfig, runtime::PawFnLoader};
         let inner = PawFnLoader::new(dir)
@@ -53,6 +39,7 @@ impl paw_core::Backend for CandleBackend {
             .load()?;
         Ok(Box::new(inner))
     }
+
     async fn ensure_assets(
         config: &paw_core::PawConfig,
         dir: &std::path::Path,
@@ -60,21 +47,35 @@ impl paw_core::Backend for CandleBackend {
     ) -> Result<(), Error> {
         crate::runtime::ensure_assets(config, dir, interpreter).await
     }
+
     fn get_or_load_model<T: InterpreterModel>(
         config: &paw_core::PawConfig,
     ) -> Result<Self::SharedModel, Error> {
         let device = Device::Cpu;
-        get_or_load_model::<T>(config, &device)?;
-        Ok(())
+        let gguf_path = config.base_models_dir().join(T::GGUF_FILE);
+
+        let (model, pool) = pool::get_or_load_model(T::INTERPRETER, 1, move || {
+            if !gguf_path.exists() {
+                return Err(Error::Cache(format!(
+                    "GGUF not cached at {}",
+                    gguf_path.display()
+                )));
+            }
+            load_gguf::<T>(&gguf_path, &device)
+                .map_err(|e| Error::Other(format!("model load: {e}")))
+        })?;
+
+        Ok(SharedModelHandle { model, pool })
     }
+
     fn load_from_dir_with_model(
         dir: std::path::PathBuf,
-        _model: Self::SharedModel,
+        handle: Self::SharedModel,
     ) -> Result<Box<dyn paw_core::PawFnTrait>, Error> {
         use crate::{PawCandleConfig, runtime::PawFnLoader};
         let inner = PawFnLoader::new(dir)
             .config(PawCandleConfig::default())
-            .load()?;
+            .load_with_model(handle.pool, handle.model)?;
         Ok(Box::new(inner))
     }
 }

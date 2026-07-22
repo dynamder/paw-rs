@@ -40,6 +40,7 @@ pub mod interpreter;
 mod kv_cache;
 pub mod lora;
 pub mod models;
+mod pool;
 mod tokenizer;
 
 pub mod config;
@@ -47,7 +48,7 @@ pub mod runtime;
 
 pub use config::PawCandleConfigBuilder;
 pub use config::{DevicePreference, PawCandleConfig};
-pub use interpreter::{CandleBackend, get_or_load_model};
+pub use interpreter::CandleBackend;
 pub use paw_core;
 pub use paw_core::{Dynamic, Gpt2, InterpreterModel, Qwen3_0_6B};
 pub use paw_core::{PawFnTrait, PawRuntimeOptions};

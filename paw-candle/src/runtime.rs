@@ -9,6 +9,7 @@ use crate::config::{DevicePreference, PawCandleConfig};
 use crate::kv_cache::PrefixKvCache;
 use crate::lora::GgufLoraAdapter;
 use crate::models::{QuantizedModel, gpt2::Gpt2Model, qwen3::Qwen3Model};
+use crate::pool::{self, ModelPool};
 use crate::tokenizer::Tokenizer;
 
 // ── PawFunction (inference runtime) ────────────────────────────────────
@@ -18,6 +19,7 @@ use crate::tokenizer::Tokenizer;
 /// Created by [`PawFnLoader`] — this struct only owns loaded state and
 /// exposes [`run()`](PawFunction::run).
 pub struct PawFunction {
+    pool: Arc<ModelPool>,
     model: Arc<Mutex<Box<dyn QuantizedModel>>>,
     tokenizer: Tokenizer,
     prefix_text: String,
@@ -73,6 +75,7 @@ fn sample_logits(logits: &Tensor, opts: &PawRuntimeOptions) -> Result<u32, Error
 
 impl PawFunction {
     pub(crate) fn new(
+        pool: Arc<ModelPool>,
         model: Arc<Mutex<Box<dyn QuantizedModel>>>,
         tokenizer: Tokenizer,
         prefix_text: String,
@@ -86,6 +89,7 @@ impl PawFunction {
         interpreter_model: String,
     ) -> Self {
         Self {
+            pool,
             model,
             tokenizer,
             prefix_text,
@@ -106,6 +110,7 @@ impl PawFunction {
 
     /// Run inference on the given input text.
     pub fn run(&mut self, input: &str, opts: &PawRuntimeOptions) -> Result<String, Error> {
+        let _permit = self.pool.acquire()?;
         let full_input = format!("{}{}", input, self.suffix_text);
 
         let mut model = self.model.lock().unwrap();
@@ -320,19 +325,33 @@ impl PawFnLoader {
     pub fn load(self) -> Result<PawFunction, Error> {
         let bundle = self.load_bundle()?;
         let device = select_device(&self.config)?;
-        let model = Arc::new(Mutex::new(load_model(&bundle, &self.config, &device)?));
+        let model_name = bundle.interpreter_model().to_string();
+        let max_copies = self.config.max_model_copies;
+        let config = self.config.clone();
+        let gguf_filename = resolve_gguf(&bundle, &config);
+        let base_models_dir = config.core.base_models_dir();
+        let gguf_path = base_models_dir.join(&gguf_filename);
+
+        let (model, pool) = pool::get_or_load_model(&model_name, max_copies, {
+            let mn = model_name.clone();
+            let gp = gguf_path.clone();
+            let dev = device.clone();
+            move || load_model_standalone(&mn, &gp, &dev)
+        })?;
+
         let tokenizer = Tokenizer::new(&bundle)?;
-        self.assemble(bundle, model, tokenizer)
+        self.assemble(bundle, pool, model, tokenizer)
     }
 
     /// Load with a pre-existing (possibly shared) model.
     pub fn load_with_model(
         self,
+        pool: Arc<ModelPool>,
         model: Arc<Mutex<Box<dyn QuantizedModel>>>,
     ) -> Result<PawFunction, Error> {
         let bundle = self.load_bundle()?;
         let tokenizer = Tokenizer::new(&bundle)?;
-        self.assemble(bundle, model, tokenizer)
+        self.assemble(bundle, pool, model, tokenizer)
     }
 
     // ── Fine-grained steps ────────────────────────────────────────────
@@ -357,6 +376,7 @@ impl PawFnLoader {
     pub fn assemble(
         &self,
         bundle: PawBundle,
+        pool: Arc<ModelPool>,
         model: Arc<Mutex<Box<dyn QuantizedModel>>>,
         tokenizer: Tokenizer,
     ) -> Result<PawFunction, Error> {
@@ -409,6 +429,7 @@ impl PawFnLoader {
         let eos_token_id = tokenizer.eos_token_id();
 
         Ok(PawFunction::new(
+            pool,
             model,
             tokenizer,
             prefix_text,
@@ -570,6 +591,44 @@ fn load_model(
         ))
     } else if lower.contains("gpt2") {
         Ok(Box::new(Gpt2Model::from_gguf(&gguf_path, device).map_err(
+            |e| Error::Other(format!("GPT-2 load error: {e}")),
+        )?))
+    } else {
+        Err(Error::UnsupportedModel(model_name.to_string()))
+    }
+}
+
+fn resolve_gguf(bundle: &PawBundle, config: &PawCandleConfig) -> String {
+    use paw_core::cache::known_models;
+    if let (Some(_), Some(f)) = (&config.base_model_repo, &config.gguf_filename) {
+        return f.clone();
+    }
+    match bundle.interpreter_model() {
+        "Qwen/Qwen3-0.6B" | "qwen3-0.6b-q6_k" => known_models::QWEN3_0_6B_GGUF_FILE.into(),
+        "gpt2" | "gpt2-q8_0" => known_models::GPT2_GGUF_FILE.into(),
+        _ => String::new(),
+    }
+}
+
+fn load_model_standalone(
+    model_name: &str,
+    gguf_path: &Path,
+    device: &Device,
+) -> Result<Box<dyn QuantizedModel>, Error> {
+    if !gguf_path.exists() {
+        return Err(Error::Cache(format!(
+            "GGUF model not cached at {}",
+            gguf_path.display()
+        )));
+    }
+    let lower = model_name.to_lowercase();
+    if lower.contains("qwen") {
+        Ok(Box::new(
+            Qwen3Model::from_gguf(gguf_path, device)
+                .map_err(|e| Error::Other(format!("Qwen3 load error: {e}")))?,
+        ))
+    } else if lower.contains("gpt2") {
+        Ok(Box::new(Gpt2Model::from_gguf(gguf_path, device).map_err(
             |e| Error::Other(format!("GPT-2 load error: {e}")),
         )?))
     } else {

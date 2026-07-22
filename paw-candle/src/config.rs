@@ -43,6 +43,8 @@ pub struct PawCandleConfig {
     pub base_model_repo: Option<String>,
     /// Override the GGUF filename (e.g. `"qwen3-0.6b-q6_k.gguf"`).
     pub gguf_filename: Option<String>,
+    /// Maximum number of base model copies to load (default: 1).
+    pub max_model_copies: usize,
 }
 
 impl Default for PawCandleConfig {
@@ -53,6 +55,7 @@ impl Default for PawCandleConfig {
             use_gguf: true,
             base_model_repo: None,
             gguf_filename: None,
+            max_model_copies: 1,
         }
     }
 }
@@ -92,6 +95,7 @@ pub struct PawCandleConfigBuilder {
     use_gguf: Option<bool>,
     base_model_repo: Option<String>,
     gguf_filename: Option<String>,
+    max_model_copies: Option<usize>,
 }
 
 impl PawCandleConfigBuilder {
@@ -129,6 +133,12 @@ impl PawCandleConfigBuilder {
         self
     }
 
+    /// Maximum number of base model copies (default: 1).
+    pub fn max_model_copies(mut self, n: usize) -> Self {
+        self.max_model_copies = Some(n);
+        self
+    }
+
     /// Build the [`PawCandleConfig`].
     pub fn build(self) -> PawCandleConfig {
         let defaults = PawCandleConfig::default();
@@ -139,6 +149,7 @@ impl PawCandleConfigBuilder {
             use_gguf: self.use_gguf.unwrap_or(defaults.use_gguf),
             base_model_repo: self.base_model_repo.or(defaults.base_model_repo),
             gguf_filename: self.gguf_filename.or(defaults.gguf_filename),
+            max_model_copies: self.max_model_copies.unwrap_or(defaults.max_model_copies),
         }
     }
 }
