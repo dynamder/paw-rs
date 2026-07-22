@@ -10,9 +10,9 @@ homepage.workspace = true
 documentation.workspace = true
 
 [dependencies]
-paw-core = { version = "0.2", path = "../paw-core" }
-paw-candle = { version = "0.2", path = "../paw-candle", optional = true }
-paw-llamacpp = { version = "0.2", path = "../paw-llamacpp", optional = true }
+paw-core = { version = "0.3", path = "../paw-core" }
+paw-candle = { version = "0.3", path = "../paw-candle", optional = true }
+paw-llamacpp = { version = "0.3", path = "../paw-llamacpp", optional = true }
 hf-hub = "1.0"
 thiserror = "2"
 
