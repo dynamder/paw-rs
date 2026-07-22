@@ -18,6 +18,7 @@ pub struct PawLlamaCppConfig {
     pub n_threads: Option<i32>,
     pub n_threads_batch: Option<i32>,
     pub seed: u32,
+    pub max_model_copies: usize,
 }
 
 impl Default for PawLlamaCppConfig {
@@ -30,6 +31,7 @@ impl Default for PawLlamaCppConfig {
             n_threads: None,
             n_threads_batch: None,
             seed: 1234,
+            max_model_copies: 1,
         }
     }
 }
@@ -49,6 +51,7 @@ pub struct PawLlamaCppConfigBuilder {
     n_threads: Option<i32>,
     n_threads_batch: Option<i32>,
     seed: Option<u32>,
+    max_model_copies: Option<usize>,
 }
 
 impl PawLlamaCppConfigBuilder {
@@ -84,6 +87,10 @@ impl PawLlamaCppConfigBuilder {
         self.seed = Some(seed);
         self
     }
+    pub fn max_model_copies(mut self, n: usize) -> Self {
+        self.max_model_copies = Some(n);
+        self
+    }
 
     pub fn build(self) -> PawLlamaCppConfig {
         let defaults = PawLlamaCppConfig::default();
@@ -95,6 +102,7 @@ impl PawLlamaCppConfigBuilder {
             n_threads: self.n_threads.or(defaults.n_threads),
             n_threads_batch: self.n_threads_batch.or(defaults.n_threads_batch),
             seed: self.seed.unwrap_or(defaults.seed),
+            max_model_copies: self.max_model_copies.unwrap_or(defaults.max_model_copies),
         }
     }
 }

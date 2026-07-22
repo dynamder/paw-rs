@@ -1,5 +1,6 @@
 pub mod backend;
 pub mod config;
+pub mod pool;
 pub mod runtime;
 
 pub use backend::LlamaCppBackend;

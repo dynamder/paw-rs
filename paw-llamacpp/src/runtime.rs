@@ -1,10 +1,10 @@
 use std::cell::RefCell;
 use std::num::NonZeroU32;
 use std::path::PathBuf;
-use std::sync::Once;
+use std::sync::{Arc, Once};
 
-use llama_cpp_2::context::LlamaContext;
 use llama_cpp_2::context::params::LlamaContextParams;
+use llama_cpp_2::context::LlamaContext;
 use llama_cpp_2::llama_backend::LlamaBackend;
 use llama_cpp_2::llama_batch::LlamaBatch;
 use llama_cpp_2::model::params::LlamaModelParams;
@@ -14,6 +14,7 @@ use llama_cpp_2::token::LlamaToken;
 use paw_core::{Error, PawBundle, PawFnTrait, PawRuntimeOptions};
 
 use crate::config::PawLlamaCppConfig;
+use crate::pool::{self, ModelPool};
 
 static INIT: Once = Once::new();
 static mut BACKEND_PTR: *const LlamaBackend = std::ptr::null();
@@ -40,23 +41,19 @@ fn eos_from_gguf(model: &LlamaModel) -> u32 {
         .unwrap_or(0)
 }
 
-struct ModelBundle {
-    model: LlamaModel,
-}
-
-#[allow(dead_code)]
 pub struct PawFunction {
-    bundle: ModelBundle,
-    adapter: Option<LlamaLoraAdapter>,
-    ctx: RefCell<Option<LlamaContext<'static>>>,
-    n_ctx: usize,
-    seed: u32,
-    prefix_text: String,
-    suffix_text: String,
-    n_prefix: usize,
-    prefix_evaluated: RefCell<bool>,
-    eos_token_id: u32,
-    interpreter: String,
+    pub(crate) model: Arc<LlamaModel>,
+    pub(crate) pool: Arc<ModelPool>,
+    pub(crate) adapter: Option<LlamaLoraAdapter>,
+    pub(crate) ctx: RefCell<Option<LlamaContext<'static>>>,
+    pub(crate) n_ctx: usize,
+    pub(crate) seed: u32,
+    pub(crate) prefix_text: String,
+    pub(crate) suffix_text: String,
+    pub(crate) n_prefix: usize,
+    pub(crate) prefix_evaluated: RefCell<bool>,
+    pub(crate) eos_token_id: u32,
+    pub(crate) interpreter: String,
 }
 
 impl Drop for PawFunction {
@@ -74,9 +71,10 @@ unsafe impl Sync for PawFunction {}
 
 impl PawFunction {
     pub fn run(&self, input: &str, opts: &PawRuntimeOptions) -> Result<String, Error> {
+        let _permit = self.pool.acquire()?;
+
         let full_prompt = format!("{}{}{}", self.prefix_text, input, self.suffix_text);
         let all_tokens = self
-            .bundle
             .model
             .str_to_token(&full_prompt, AddBos::Never)
             .map_err(|e| Error::Other(format!("tokenize: {e}")))?;
@@ -111,7 +109,6 @@ impl PawFunction {
                     .map_err(|e| Error::Other(format!("prefix eval: {e}")))?;
             }
             *self.prefix_evaluated.borrow_mut() = true;
-            //info!("Prefix evaluated and cached ({} tokens)", n_prefix);
         }
 
         let _ = ctx.clear_kv_cache_seq(Some(0), Some(n_prefix as u32), None);
@@ -152,15 +149,11 @@ impl PawFunction {
                 None => break,
             };
 
-            if self.bundle.model.is_eog_token(token) || token.0 as u32 == self.eos_token_id {
+            if self.model.is_eog_token(token) || token.0 as u32 == self.eos_token_id {
                 break;
             }
 
-            if let Ok(piece) = self
-                .bundle
-                .model
-                .token_to_piece(token, &mut decoder, false, None)
-            {
+            if let Ok(piece) = self.model.token_to_piece(token, &mut decoder, false, None) {
                 output.push_str(&piece);
             }
 
@@ -209,8 +202,8 @@ impl PawFnLoader {
 
     pub fn load(self) -> Result<Box<PawFunction>, Error> {
         let bundle = self.load_bundle()?;
-        let (model, adapter) = self.load_model(&bundle)?;
-        self.assemble_boxed(bundle, model, adapter)
+        let (model, pool, adapter) = self.load_model(&bundle)?;
+        self.assemble_boxed(bundle, model, pool, adapter)
     }
 
     fn load_bundle(&self) -> Result<PawBundle, Error> {
@@ -220,7 +213,7 @@ impl PawFnLoader {
     fn load_model(
         &self,
         bundle: &PawBundle,
-    ) -> Result<(LlamaModel, Option<LlamaLoraAdapter>), Error> {
+    ) -> Result<(Arc<LlamaModel>, Arc<ModelPool>, Option<LlamaLoraAdapter>), Error> {
         use paw_core::cache::known_models;
         let model_name = bundle.interpreter_model();
         let filename = match model_name {
@@ -236,31 +229,38 @@ impl PawFnLoader {
             )));
         }
         let n_layers = self.config.n_gpu_layers.max(0) as u32;
-        let mp = if n_layers > 0 {
-            LlamaModelParams::default().with_n_gpu_layers(n_layers)
-        } else {
-            LlamaModelParams::default()
-        };
-        let model = LlamaModel::load_from_file(global_backend(), &gguf_path, &mp)
-            .map_err(|e| Error::Other(format!("model load: {e}")))?;
-        //info!("Model loaded ({} params)", model.n_params());
 
-        let adapter = if bundle.adapter_path.exists() {
+        let max_copies = self.config.max_model_copies;
+        let adapter_path = bundle.adapter_path.clone();
+
+        let gguf_path_clone = gguf_path.clone();
+        let (model, pool) = pool::get_or_load_model(model_name, max_copies, move || {
+            let mp = if n_layers > 0 {
+                LlamaModelParams::default().with_n_gpu_layers(n_layers)
+            } else {
+                LlamaModelParams::default()
+            };
+            LlamaModel::load_from_file(global_backend(), &gguf_path_clone, &mp)
+                .map_err(|e| Error::Other(format!("model load: {e}")))
+        })?;
+
+        let adapter = if adapter_path.exists() {
             Some(
                 model
-                    .lora_adapter_init(&bundle.adapter_path)
+                    .lora_adapter_init(&adapter_path)
                     .map_err(|e| Error::Other(format!("LoRA adapter load failed: {e}")))?,
             )
         } else {
             None
         };
-        Ok((model, adapter))
+        Ok((model, pool, adapter))
     }
 
     fn assemble_boxed(
         &self,
         bundle: PawBundle,
-        model: LlamaModel,
+        model: Arc<LlamaModel>,
+        pool: Arc<ModelPool>,
         adapter: Option<LlamaLoraAdapter>,
     ) -> Result<Box<PawFunction>, Error> {
         let n_ctx = self.config.core.n_ctx() as usize;
@@ -272,9 +272,9 @@ impl PawFnLoader {
             .map_err(|e| Error::Other(format!("tokenize prefix: {e}")))?;
         let n_prefix = prefix_tokens.len();
 
-        // Create Box FIRST so model is on the heap
         let mut pf = Box::new(PawFunction {
-            bundle: ModelBundle { model },
+            model,
+            pool,
             adapter,
             ctx: RefCell::new(None),
             n_ctx,
@@ -287,7 +287,6 @@ impl PawFnLoader {
             interpreter: bundle.interpreter_model().to_string(),
         });
 
-        // Create context from model already on the heap inside the Box
         let mut cp = LlamaContextParams::default().with_n_ctx(Some(
             NonZeroU32::new(n_ctx as u32).unwrap_or(NonZeroU32::new(2048).unwrap()),
         ));
@@ -299,7 +298,6 @@ impl PawFnLoader {
         }
 
         let ctx = pf
-            .bundle
             .model
             .new_context(global_backend(), cp)
             .map_err(|e| Error::Other(format!("new_context: {e}")))?;
@@ -307,23 +305,11 @@ impl PawFnLoader {
         if let Some(ref mut a) = pf.adapter {
             ctx.lora_adapter_set(a, 1.0)
                 .map_err(|e| Error::Other(format!("lora set: {e}")))?;
-            //info!("LoRA applied");
         }
 
         let ctx: LlamaContext<'static> = unsafe { std::mem::transmute(ctx) };
         *pf.ctx.borrow_mut() = Some(ctx);
 
-        // info!(
-        //     "Program loaded: model={}, prefix={} tokens, eos={}{}",
-        //     bundle.interpreter_model(),
-        //     n_prefix,
-        //     eos_token_id,
-        //     if pf.adapter.is_some() {
-        //         " (with LoRA)"
-        //     } else {
-        //         ""
-        //     },
-        // );
         Ok(pf)
     }
 }
