@@ -1,6 +1,12 @@
 name: Publish
 
 on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to publish (e.g. v0.3.0)'
+        required: true
+        type: string
   workflow_run:
     workflows: ["CI"]
     types: [completed]
@@ -12,15 +18,24 @@ env:
 jobs:
   publish:
     name: Publish to crates.io
-    if: github.event.workflow_run.conclusion == 'success'
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     environment: crates.io
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout (auto)
+        if: github.event_name == 'workflow_run'
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Check for release tag
+      - name: Checkout (manual)
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+
+      - name: Verify release tag (auto)
+        if: github.event_name == 'workflow_run'
         run: |
           TAG=$(git tag --points-at HEAD | grep '^v' || true)
           if [ -z "$TAG" ]; then
