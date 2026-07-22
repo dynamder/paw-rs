@@ -7,15 +7,17 @@ use crate::models::QuantizedModel;
 
 type LoadFn = Mutex<Box<dyn Fn() -> Result<Box<dyn QuantizedModel>, Error> + Send>>;
 
-struct PoolState {
-    models: Vec<Arc<Mutex<Box<dyn QuantizedModel>>>>,
-    used: usize,
-    max: usize,
+#[doc(hidden)]
+pub struct PoolState {
+    pub models: Vec<Arc<Mutex<Box<dyn QuantizedModel>>>>,
+    pub used: usize,
+    pub max: usize,
     loading: bool,
 }
 
 pub struct ModelPool {
-    state: Mutex<PoolState>,
+    #[doc(hidden)]
+    pub state: Mutex<PoolState>,
     cv: Condvar,
     load_fn: LoadFn,
 }

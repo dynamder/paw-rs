@@ -19,8 +19,10 @@ use crate::tokenizer::Tokenizer;
 /// Created by [`PawFnLoader`] — this struct only owns loaded state and
 /// exposes [`run()`](PawFunction::run).
 pub struct PawFunction {
-    pool: Arc<ModelPool>,
-    model: Arc<Mutex<Box<dyn QuantizedModel>>>,
+    #[doc(hidden)]
+    pub pool: Arc<ModelPool>,
+    #[doc(hidden)]
+    pub model: Arc<Mutex<Box<dyn QuantizedModel>>>,
     tokenizer: Tokenizer,
     prefix_text: String,
     suffix_text: String,

@@ -59,13 +59,13 @@ async fn main() -> std::result::Result<(), paw_core::Error> {
 }
 ```
 
-### Static typing with model sharing (candle backend)
+### Static typing with model sharing
 
-Requires `--features candle`. Two `PawFn<Qwen3_0_6B, Candle>` instances share one base model in memory:
+Multiple `PawFn<T, B>` instances share a single base model. Both backends support this:
 
 ```rust
 use paw_rs::prelude::*;
-use paw_rs::paw_core::{Candle, Qwen3_0_6B};
+use paw_rs::paw_core::{Qwen3_0_6B, Candle};
 
 #[tokio::main]
 async fn main() -> std::result::Result<(), paw_core::Error> {
@@ -102,11 +102,38 @@ async fn main() -> std::result::Result<(), paw_core::Error> {
 }
 ```
 
----
+### Model copies & concurrency control
 
-## CLI
+`max_model_copies` controls how many base model copies to load and how many concurrent inferences are allowed:
 
-Same as before. See `paw-rs --help`.
+```rust
+use paw_llamacpp::{PawFnLoader, PawLlamaCppConfig};
+
+// 1 copy (default): all PawFunctions share one model, serial execution, minimal memory
+let config = PawLlamaCppConfig::default();
+
+// Up to 4 copies: lazy-loaded, allows 4 concurrent PawFunction inferences
+let config = PawLlamaCppConfig::builder()
+    .core(paw_config)
+    .max_model_copies(4)
+    .build();
+
+let a = PawFnLoader::new("program_a_dir").config(config.clone()).load()?;
+let b = PawFnLoader::new("program_b_dir").config(config).load()?;
+// a and b share the same model pool (if using the same interpreter)
+// Initially 1 copy loaded; more are lazily created on demand, up to 4
+```
+
+Also available for the candle backend:
+
+```rust
+use paw_candle::{PawFnLoader, PawCandleConfig};
+
+let config = PawCandleConfig::builder()
+    .core(paw_config)
+    .max_model_copies(4)
+    .build();
+```
 
 ---
 
@@ -114,8 +141,8 @@ Same as before. See `paw-rs --help`.
 
 | flag | Description |
 |------|-------------|
-| `candle` | Candle backend (requires `default-features = false`) |
 | `llamacpp` | llama.cpp backend (default) |
+| `candle` | Candle backend (requires `default-features = false`) |
 | `cuda` | NVIDIA GPU (forwarded to active backend) |
 | `metal` | Apple Silicon GPU |
 | `mkl` | Intel MKL CPU acceleration (candle only) |
@@ -135,12 +162,19 @@ cargo run --no-default-features --features candle,mkl -- run --program email-tri
 
 ## Performance
 
-| Backend | Qwen3 (10 tokens) | Model memory | GPU support |
-|---------|------------------|--------------|-------------|
+| Backend | Qwen3 (10 tokens) | Model memory (1 copy) | GPU support |
+|---------|------------------|----------------------|-------------|
 | llama.cpp (CPU) | ~240ms | 588 MB | CUDA / Metal / Vulkan |
-| candle (CPU, MKL) | ~2000ms | 588 MB | CUDA / Metal |
 | candle (CPU, native) | ~680ms | 588 MB | CUDA / Metal |
 | candle (CUDA) | ~200ms | 588 MB + VRAM | CUDA |
+
+Memory with shared base model (4 PawFunctions):
+
+| Configuration | llama.cpp | candle |
+|---------------|-----------|--------|
+| No sharing (1 copy each) | ~2.4 GB | ~2.4 GB |
+| Shared, serial (`max_model_copies=1`) | ~588 MB | ~588 MB |
+| Shared, 4-way parallel (`max_model_copies=4`) | ~2.4 GB | ~2.4 GB |
 
 ---
 
@@ -149,8 +183,8 @@ cargo run --no-default-features --features candle,mkl -- run --program email-tri
 | crate | Description |
 |-------|-------------|
 | `paw-core` | `InterpreterModel` / `Backend` traits, `PawFnTrait`, `PawRuntimeOptions`, HTTP client, cache |
-| `paw-candle` | `CandleBackend`, `Qwen3Model`, `Gpt2Model`, `PawFnLoader` |
-| `paw-llamacpp` | `LlamaCppBackend` (experimental), ~2.8x CPU speedup over candle |
+| `paw-candle` | `CandleBackend`, `Qwen3Model`, `Gpt2Model`, global model pool with lazy loading |
+| `paw-llamacpp` | `LlamaCppBackend`, ~2.8x CPU speedup over candle, global model pool with lazy loading |
 | `paw-rs` | `PawFn<T, B>`, `PawFnBuilder`, CLI |
 
 ---
@@ -162,8 +196,12 @@ cargo run --no-default-features --features candle,mkl -- run --program email-tri
 | `high_level` | `paw-rs` | Builder: compile → infer | Yes |
 | `low_level` | `paw-rs` | Builder: load → infer | Yes |
 | `typed_api` | `paw-rs` | Static typing with model sharing | Yes |
-| `qwen3_inference` | `paw-candle` | Load existing program | No |
+| `qwen3_inference` | `paw-candle` | Load existing program, infer | No |
 | `llamacpp_benchmark` | `paw-llamacpp` | llama.cpp latency test | No |
+| `parallel_benchmark` | `paw-llamacpp` | Parallel throughput benchmark | No |
+| `verify_backend` | `paw-llamacpp` | Backend correctness verification | No |
+| `compare_ref` | `paw-candle` | Candle reference output (cross-backend) | No |
+| `compare_test` | `paw-llamacpp` | Llamacpp test output (cross-backend) | No |
 | `verify_bundle` | `paw-candle` | LoRA forward verification | No |
 | `download_and_save` | `paw-core` | Bundle format roundtrip | No |
 
@@ -176,4 +214,7 @@ PAW_API_KEY=sk_... cargo run --example typed_api -p paw-rs --features candle
 
 # llama.cpp benchmark (no API key needed)
 cargo run --release --example llamacpp_benchmark -p paw-llamacpp
+
+# Parallel inference test
+cargo run --release --example parallel_benchmark -p paw-llamacpp -- fccdea9da515e3f20dd6 4 3 30
 ```
