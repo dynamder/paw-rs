@@ -1,0 +1,25 @@
+release.toml
+  s_4eb2e7248b434e::t_628155a6f00deb 1-16
+.github/workflows/ci.yml
+  s_4eb2e7248b434e::t_f1629b9feb14d2 6
+.github/workflows/publish.yml
+  s_4eb2e7248b434e::t_e30c0001c8e34a 4-7,13-15,17,20-21,23,25-30,33-35,39-40,43-45,49-50
+Cargo.lock
+  s_4eb2e7248b434e::t_91d96196160bf6 4475,4496,4511,4521,4537
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "df31a2953f2fbd0f62baca2d4dbc45e10211a534",
+  "prompts": {},
+  "sessions": {
+    "s_4eb2e7248b434e": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_07715fba2ffeBua2dQCmkaVLwF",
+        "model": "unknown"
+      },
+      "human_author": "dynamder <igaster@163.com>"
+    }
+  }
+}
