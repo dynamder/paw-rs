@@ -1,0 +1,27 @@
+paw-candle/src/runtime.rs
+  s_4eb2e7248b434e::t_d199d5e62894f2 628-630
+paw-llamacpp/src/runtime.rs
+  s_4eb2e7248b434e::t_d199d5e62894f2 7
+paw-llamacpp/examples/parallel_benchmark.rs
+  s_4eb2e7248b434e::t_d199d5e62894f2 3,13-15,25-27,39-41,56-59,76-79,97-101,105-106,123-125,129-139,143-147,150-151,160-162,172-173,178-182,185-189,192-196,198-204
+paw-llamacpp/examples/verify_backend.rs
+  s_4eb2e7248b434e::t_d199d5e62894f2 118
+paw-llamacpp/src/backend.rs
+  s_4eb2e7248b434e::t_d199d5e62894f2 96-97
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "77e870c9f3148a9fc3b1bd93e43a0cc70afa8264",
+  "prompts": {},
+  "sessions": {
+    "s_4eb2e7248b434e": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_07715fba2ffeBua2dQCmkaVLwF",
+        "model": "unknown"
+      },
+      "human_author": "dynamder <igaster@163.com>"
+    }
+  }
+}
